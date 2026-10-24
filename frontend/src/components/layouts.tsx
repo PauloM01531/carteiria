@@ -47,6 +47,7 @@ export function PublicLayout() {
 
 const icons = {
   painel: 'M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z',
+  lancamentos: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
   perfil: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z',
   admin: 'M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z',
 }
@@ -64,6 +65,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const items = [
     { to: '/painel', label: 'Painel', icon: icons.painel },
+    { to: '/lancamentos', label: 'Lançamentos', icon: icons.lancamentos },
     { to: '/perfil', label: 'Perfil', icon: icons.perfil },
     ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: icons.admin }] : []),
   ]
@@ -131,7 +133,7 @@ export function AppLayout() {
             key={i.to}
             to={i.to}
             className={({ isActive }) =>
-              cx('flex min-w-16 flex-col items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold', isActive ? 'text-accent' : 'text-muted')
+              cx('flex min-w-16 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold', isActive ? 'text-accent' : 'text-muted')
             }
           >
             <NavIcon d={i.icon} />

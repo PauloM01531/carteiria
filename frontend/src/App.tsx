@@ -10,6 +10,7 @@ import { NotFoundPage, PrivacyPage, TermsPage } from './pages/legal'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Profile = lazy(() => import('./pages/Profile'))
+const TransactionsPage = lazy(() => import('./pages/transactions/TransactionsPage'))
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
 
 export function AppRoutes() {
@@ -29,6 +30,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route path="/painel" element={<Dashboard />} />
+          <Route path="/lancamentos" element={<TransactionsPage />} />
           <Route path="/perfil" element={<Profile />} />
           <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         </Route>

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(' ')
@@ -216,4 +216,120 @@ export function useAsync() {
     }
   }
   return { loading, error, setError, run }
+}
+
+/** Janela modal genérica (formulários). Fecha com Esc ou clicando fora. */
+export function Modal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    ref.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [open, onClose])
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 sm:items-center sm:p-4" onMouseDown={onClose}>
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        onMouseDown={(e) => e.stopPropagation()}
+        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-line bg-surface p-5 text-ink shadow-xl sm:max-w-lg sm:rounded-2xl sm:p-6"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 id="modal-title" className="font-display text-xl font-semibold">
+            {title}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid h-10 w-10 place-items-center rounded-xl text-muted hover:bg-surface-2">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & { label: string; error?: string | null; children: ReactNode }
+
+export function SelectField({ label, error, className, id, children, ...rest }: SelectProps) {
+  const autoId = useId()
+  const selId = id ?? autoId
+  return (
+    <div className={cx('flex flex-col gap-1.5', className)}>
+      <label htmlFor={selId} className="text-sm font-semibold">
+        {label}
+      </label>
+      <select
+        id={selId}
+        aria-invalid={!!error}
+        className={cx('min-h-11 rounded-xl border bg-surface px-3 text-base outline-none focus:border-accent', error ? 'border-negative' : 'border-line')}
+        {...rest}
+      >
+        {children}
+      </select>
+      {error && <p className="text-sm text-negative">{error}</p>}
+    </div>
+  )
+}
+
+type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; error?: string | null }
+
+export function TextareaField({ label, error, className, id, ...rest }: TextareaProps) {
+  const autoId = useId()
+  const taId = id ?? autoId
+  return (
+    <div className={cx('flex flex-col gap-1.5', className)}>
+      <label htmlFor={taId} className="text-sm font-semibold">
+        {label}
+      </label>
+      <textarea
+        id={taId}
+        rows={3}
+        className={cx('rounded-xl border bg-surface px-3.5 py-2.5 text-base outline-none focus:border-accent', error ? 'border-negative' : 'border-line')}
+        {...rest}
+      />
+      {error && <p className="text-sm text-negative">{error}</p>}
+    </div>
+  )
+}
+
+/** Botões de opção lado a lado (ex.: Receita | Despesa). */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+  label: string
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cx('min-h-9 flex-1 rounded-lg px-4 text-sm font-semibold transition', value === o.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink')}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
 }

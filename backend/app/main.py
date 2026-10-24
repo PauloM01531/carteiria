@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.routes import admin, auth, health, me
+from app.api.routes import admin, auth, health, me, transactions
 from app.config import get_settings
 
 log = logging.getLogger("carteiria")
@@ -83,7 +83,7 @@ def create_app() -> FastAPI:
             status_code=500,
         )
 
-    for r in (health.router, auth.router, me.router, admin.router):
+    for r in (health.router, auth.router, me.router, transactions.router, admin.router):
         app.include_router(r, prefix="/api/v1")
     return app
 

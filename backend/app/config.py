@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False
     mail_from: str = "CarteirIA <nao-responda@carteiria.local>"
 
+    # Usado somente pelos testes (limpeza do banco de testes) e por backups.
+    postgres_superuser_password: str | None = None
+
     # Quando definido (testes), substitui o nome do banco.
     db_name_override: str | None = None
 

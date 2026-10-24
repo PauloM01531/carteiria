@@ -24,7 +24,20 @@ from app.services.email import MemoryEmailSender, set_email_sender  # noqa: E402
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PASSWORD = "SenhaForte123"
 
-TABLES = "user_preferences, user_sessions, auth_tokens, invites, audit_logs, users"
+_super_engine = None
+
+
+def super_engine():
+    """Superusuário do banco de TESTES: só para preparar/limpar dados (ignora RLS)."""
+    global _super_engine
+    if _super_engine is None:
+        from sqlalchemy import create_engine
+        s = get_settings()
+        url = s.owner_database_url.replace(
+            f"{s.db_owner_user}:", "postgres:", 1).replace(
+            s.db_owner_password, s.postgres_superuser_password or "", 1)
+        _super_engine = create_engine(url)
+    return _super_engine
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -38,8 +51,13 @@ def migrated_db() -> None:
 
 @pytest.fixture(autouse=True)
 def clean_state() -> Iterator[None]:
-    with get_owner_engine().begin() as conn:
-        conn.execute(text(f"TRUNCATE {TABLES} CASCADE"))
+    with super_engine().begin() as conn:
+        # DELETE (e não TRUNCATE) para preservar as categorias padrão do sistema.
+        conn.execute(text("DELETE FROM transactions"))
+        conn.execute(text("DELETE FROM categories WHERE user_id IS NOT NULL"))
+        conn.execute(text("DELETE FROM users"))
+        conn.execute(text("DELETE FROM invites"))
+        conn.execute(text("DELETE FROM audit_logs"))
         conn.execute(text("""UPDATE app_settings SET value = '"approval"' WHERE key = 'registration_mode'"""))
     limiter.reset()
     yield
@@ -50,6 +68,11 @@ def mailbox() -> MemoryEmailSender:
     sender = MemoryEmailSender()
     set_email_sender(sender)
     return sender
+
+
+def super_exec(sql: str, **params):
+    with super_engine().begin() as conn:
+        return conn.execute(text(sql), params)
 
 
 def owner_exec(sql: str, **params):

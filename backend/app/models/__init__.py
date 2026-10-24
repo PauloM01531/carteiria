@@ -3,6 +3,7 @@ from app.models.base import Base
 from app.models.identity import AuthToken, User, UserSession
 from app.models.admin import AppSetting, AuditLog, Invite
 from app.models.preferences import UserPreferences
+from app.models.finance import Category, Transaction
 
 __all__ = [
     "Base",
@@ -13,4 +14,6 @@ __all__ = [
     "AppSetting",
     "AuditLog",
     "UserPreferences",
+    "Category",
+    "Transaction",
 ]

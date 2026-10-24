@@ -27,6 +27,7 @@ function renderAt(path: string) {
 }
 
 const unauthenticated: Handler = () => ({ status: 401, body: { detail: { code: 'not_authenticated', message: 'Sessão inválida' } } })
+const emptyPage = { items: [], total: 0, page: 1, page_size: 6, totals: { income: '0.00', expense: '0.00', balance: '0.00', count: 0 } }
 const user = { id: '1', email: 'ana@exemplo.com.br', display_name: 'Ana Teste', role: 'USER', status: 'active', created_at: '2026-10-01T12:00:00Z' }
 
 beforeEach(() => {
@@ -42,7 +43,7 @@ describe('proteção de rotas', () => {
   })
 
   it('usuário comum não vê o painel administrativo', async () => {
-    mockFetch((url) => (url.endsWith('/auth/session') ? { status: 200, body: { user, csrf_token: 'abc' } } : { status: 200, body: {} }))
+    mockFetch((url) => (url.endsWith('/auth/session') ? { status: 200, body: { user, csrf_token: 'abc' } } : { status: 200, body: emptyPage }))
     renderAt('/admin')
     expect(await screen.findByRole('heading', { name: /Ana/ })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Administração' })).not.toBeInTheDocument()
@@ -71,6 +72,7 @@ describe('formulários', () => {
         return { status: 200, body: { user, csrf_token: 'token-csrf' } }
       }
       if (url.endsWith('/auth/session')) return logged ? { status: 200, body: { user, csrf_token: 'token-csrf' } } : unauthenticated(url)
+      if (url.includes('/transactions')) return { status: 200, body: emptyPage }
       return { status: 200, body: { theme: 'system' } }
     })
     renderAt('/entrar')
