@@ -83,4 +83,32 @@ def require_admin(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, {"code": "forbidden", "message": "Acesso não permitido."}
         )
+    # A conta administrativa precisa de segundo fator ativo e confirmado nesta sessão.
+    if not ctx.user.mfa_enabled:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"code": "mfa_setup_required", "message": "Ative a verificação em duas etapas no Perfil para usar a administração."},
+        )
+    if not ctx.session.mfa_verified:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"code": "mfa_required", "message": "Saia e entre novamente usando o código do aplicativo autenticador."},
+        )
+    return ctx
+
+
+REAUTH_MINUTES = 10
+
+
+def require_recent_auth(ctx: AuthContext = Depends(require_admin)) -> AuthContext:
+    """Operações administrativas críticas exigem confirmação de identidade nos últimos minutos."""
+    from datetime import timedelta
+
+    from app.services.sessions import utcnow
+
+    if ctx.session.reauth_at is None or ctx.session.reauth_at < utcnow() - timedelta(minutes=REAUTH_MINUTES):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"code": "reauth_required", "message": "Confirme sua identidade para continuar."},
+        )
     return ctx

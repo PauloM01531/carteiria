@@ -117,7 +117,7 @@ class UserClient:
 
     def login(self, email: str, password: str = PASSWORD):
         r = self.http.post("/api/v1/auth/login", json={"email": email, "password": password})
-        if r.status_code == 200:
+        if r.status_code == 200 and "csrf_token" in r.json():
             self.csrf = r.json()["csrf_token"]
             self.user = r.json()["user"]
         return r
@@ -157,6 +157,28 @@ def user_b(mailbox) -> UserClient:
     return make_user(mailbox, "bruno@exemplo.com.br", "Bruno Teste")
 
 
+def totp_code(secret: str, offset_steps: int = 0) -> str:
+    """Código TOTP do passo atual (+offset). Útil para gerar códigos ainda não usados."""
+    import time
+
+    import pyotp
+
+    return pyotp.TOTP(secret).at(time.time() + 30 * offset_steps)
+
+
+def enable_mfa(client: UserClient, password: str = PASSWORD) -> str:
+    r = client.post("/api/v1/me/mfa/setup", json={"password": password})
+    assert r.status_code == 200, r.text
+    secret = r.json()["secret"]
+    r = client.post("/api/v1/me/mfa/enable", json={"code": totp_code(secret)})
+    assert r.status_code == 200, r.text
+    client.mfa_secret = secret  # type: ignore[attr-defined]
+    return secret
+
+
 @pytest.fixture
 def admin(mailbox) -> UserClient:
-    return make_user(mailbox, "admin@exemplo.com.br", "Admin Teste", role="ADMIN")
+    """Administrador com verificação em duas etapas ativa (exigida para a administração)."""
+    client = make_user(mailbox, "admin@exemplo.com.br", "Admin Teste", role="ADMIN")
+    enable_mfa(client)
+    return client

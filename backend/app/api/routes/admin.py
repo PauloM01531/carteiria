@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, client_ip, require_admin
+from app.api.deps import AuthContext, client_ip, require_admin, require_recent_auth
 from app.config import get_settings
 from app.db import get_db
 from app.models import AuditLog, Invite, User
@@ -107,7 +107,7 @@ def _change_status(
 
 
 @router.post("/users/{user_id}/approve", response_model=AdminUserOut)
-def approve(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def approve(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     out = _change_status("user_approved", ("pending_approval",), "active", user_id, request, ctx, db)
     get_email_sender().send(out.email, "Sua conta na CarteirIA foi aprovada",
                             "Sua conta foi aprovada. Você já pode entrar na CarteirIA.")
@@ -115,17 +115,17 @@ def approve(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(req
 
 
 @router.post("/users/{user_id}/reject", response_model=AdminUserOut)
-def reject(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def reject(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     return _change_status("user_rejected", ("pending_approval",), "rejected", user_id, request, ctx, db)
 
 
 @router.post("/users/{user_id}/suspend", response_model=AdminUserOut)
-def suspend(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def suspend(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     return _change_status("user_suspended", ("active",), "suspended", user_id, request, ctx, db)
 
 
 @router.post("/users/{user_id}/reactivate", response_model=AdminUserOut)
-def reactivate(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def reactivate(user_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     return _change_status("user_reactivated", ("suspended", "rejected"), "active", user_id, request, ctx, db)
 
 
@@ -135,7 +135,7 @@ def get_mode(ctx: AuthContext = Depends(require_admin), db: Session = Depends(ge
 
 
 @router.put("/registration-mode", response_model=RegistrationModeOut)
-def put_mode(body: RegistrationModeIn, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def put_mode(body: RegistrationModeIn, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     old = get_registration_mode(db)
     set_registration_mode(db, body.mode)
     audit.record(db, "registration_mode_changed", "success", actor_id=ctx.user.id, actor_email=ctx.user.email,
@@ -151,7 +151,7 @@ def list_invites(ctx: AuthContext = Depends(require_admin), db: Session = Depend
 
 
 @router.post("/invites", response_model=InviteCreatedOut, status_code=201)
-def create_invite(body: InviteIn, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def create_invite(body: InviteIn, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     s = get_settings()
     email = str(body.email).lower()
     if db.scalar(select(User.id).where(User.email == email)):
@@ -176,7 +176,7 @@ def create_invite(body: InviteIn, request: Request, ctx: AuthContext = Depends(r
 
 
 @router.delete("/invites/{invite_id}", response_model=MessageOut)
-def revoke_invite(invite_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_admin), db: Session = Depends(get_db)):
+def revoke_invite(invite_id: uuid.UUID, request: Request, ctx: AuthContext = Depends(require_recent_auth), db: Session = Depends(get_db)):
     inv = db.get(Invite, invite_id)
     if inv is None:
         raise HTTPException(404, {"code": "not_found", "message": "Convite não encontrado."})

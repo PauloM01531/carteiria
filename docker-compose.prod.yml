@@ -1,0 +1,77 @@
+# Produção: PostgreSQL + API + Caddy (site com HTTPS automático).
+# Uso no servidor:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Somente as portas 80 e 443 ficam expostas. Banco e API ficam na rede interna.
+name: carteiria-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?defina no .env.production}
+      DB_OWNER_USER: ${DB_OWNER_USER}
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD}
+      DB_APP_USER: ${DB_APP_USER}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_TEST_NAME: ${DB_NAME}_test
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+    networks: [internal]
+
+  # Aplica as migrações com o papel DONO e termina.
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env.production
+    environment: &api_env
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+    restart: "no"
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.production
+    environment: *api_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?defina o domínio no .env.production}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    networks: [internal]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:

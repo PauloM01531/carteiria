@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app import cli
 from app.main import app
-from tests.conftest import PASSWORD, UserClient, owner_exec, register_and_verify
+from tests.conftest import PASSWORD, UserClient, enable_mfa, owner_exec, register_and_verify
 
 API = "/api/v1"
 
@@ -133,4 +133,8 @@ def test_promocao_a_admin_somente_pela_cli_do_servidor(mailbox, monkeypatch):
     assert tuple(row) == ("ADMIN", "active")
     owner = UserClient()
     assert owner.login("dono@exemplo.com.br").status_code == 200
+    # Sem verificação em duas etapas, a administração fica bloqueada
+    r = owner.get(f"{API}/admin/stats")
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "mfa_setup_required"
+    enable_mfa(owner)
     assert owner.get(f"{API}/admin/stats").status_code == 200

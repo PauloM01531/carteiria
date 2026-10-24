@@ -66,11 +66,50 @@ class UserOut(BaseModel):
     role: str
     status: str
     created_at: datetime
+    mfa_enabled: bool = False
 
 
 class SessionOut(BaseModel):
     user: UserOut
     csrf_token: str
+
+
+class MfaChallengeOut(BaseModel):
+    mfa_required: bool = True
+    challenge: str
+
+
+class MfaLoginIn(In):
+    challenge: str = Field(min_length=10, max_length=100)
+    code: str = Field(min_length=6, max_length=8)
+
+
+class ReauthIn(In):
+    password: str = Field(max_length=128)
+    code: str | None = Field(default=None, max_length=8)
+
+
+class MfaSetupIn(In):
+    password: str = Field(max_length=128)
+
+
+class MfaSetupOut(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class MfaCodeIn(In):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class MfaDisableIn(In):
+    password: str = Field(max_length=128)
+    code: str = Field(min_length=6, max_length=8)
+
+
+class MfaStatusOut(BaseModel):
+    enabled: bool
+    required: bool
 
 
 # ---------- Perfil ----------

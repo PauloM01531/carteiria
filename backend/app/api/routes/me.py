@@ -13,12 +13,17 @@ from app.schemas import (
     DeleteAccountIn,
     DeviceSessionOut,
     MessageOut,
+    MfaCodeIn,
+    MfaDisableIn,
+    MfaSetupIn,
+    MfaSetupOut,
+    MfaStatusOut,
     PreferencesIn,
     PreferencesOut,
     ProfileUpdateIn,
     UserOut,
 )
-from app.security import passwords
+from app.security import mfa, passwords
 from app.security.rate_limit import enforce
 from app.services import audit
 
@@ -117,3 +122,65 @@ def delete_account(
     db.commit()
     _clear_session_cookie(response)
     return MessageOut(message="Sua conta e seus dados foram excluídos.")
+
+
+# ---------------------------------------------------------------- verificação em duas etapas (MFA)
+
+@router.get("/mfa", response_model=MfaStatusOut)
+def mfa_status(ctx: AuthContext = Depends(get_auth)) -> MfaStatusOut:
+    return MfaStatusOut(enabled=ctx.user.mfa_enabled, required=ctx.user.role == "ADMIN")
+
+
+@router.post("/mfa/setup", response_model=MfaSetupOut)
+def mfa_setup(body: MfaSetupIn, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> MfaSetupOut:
+    """Gera um novo segredo (ainda inativo). Só passa a valer após confirmar um código em /mfa/enable."""
+    enforce(f"mfa-setup:user:{ctx.user.id}", limit=5, window_seconds=15 * 60)
+    if ctx.user.mfa_enabled:
+        raise HTTPException(409, {"code": "already_enabled", "message": "A verificação em duas etapas já está ativa."})
+    if not passwords.verify_password(ctx.user.password_hash, body.password):
+        raise HTTPException(400, {"code": "invalid_password", "message": "Senha incorreta."})
+    secret = mfa.new_secret()
+    ctx.user.mfa_secret_enc = mfa.encrypt(secret)
+    ctx.user.mfa_last_step = None
+    db.commit()
+    return MfaSetupOut(secret=secret, otpauth_uri=mfa.provisioning_uri(secret, ctx.user.email))
+
+
+@router.post("/mfa/enable", response_model=MessageOut)
+def mfa_enable(body: MfaCodeIn, request: Request, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> MessageOut:
+    enforce(f"mfa-enable:user:{ctx.user.id}", limit=10, window_seconds=15 * 60)
+    secret = mfa.decrypt(ctx.user.mfa_secret_enc or "")
+    if ctx.user.mfa_enabled or not secret:
+        raise HTTPException(409, {"code": "invalid_state", "message": "Gere um novo código QR antes de ativar."})
+    step = mfa.check_code(secret, body.code, ctx.user.mfa_last_step)
+    if step is None:
+        raise HTTPException(400, {"code": "invalid_code", "message": "Código inválido. Confira o aplicativo e tente de novo."})
+    from app.services.sessions import revoke_all, utcnow
+
+    ctx.user.mfa_enabled_at = utcnow()
+    ctx.user.mfa_last_step = step
+    ctx.session.mfa_verified = True
+    ctx.session.reauth_at = utcnow()
+    revoke_all(db, ctx.user.id, except_id=ctx.session.id)  # outras sessões não passaram pelo 2º fator
+    audit.record(db, "mfa_enabled", "success", actor_id=ctx.user.id, ip=client_ip(request))
+    db.commit()
+    return MessageOut(message="Verificação em duas etapas ativada.")
+
+
+@router.post("/mfa/disable", response_model=MessageOut)
+def mfa_disable(body: MfaDisableIn, request: Request, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> MessageOut:
+    enforce(f"mfa-disable:user:{ctx.user.id}", limit=5, window_seconds=15 * 60)
+    if ctx.user.role == "ADMIN":
+        raise HTTPException(400, {"code": "admin_requires_mfa", "message": "A conta administrativa precisa manter a verificação em duas etapas."})
+    if not ctx.user.mfa_enabled:
+        raise HTTPException(409, {"code": "invalid_state", "message": "A verificação em duas etapas não está ativa."})
+    if not passwords.verify_password(ctx.user.password_hash, body.password):
+        raise HTTPException(400, {"code": "invalid_password", "message": "Senha incorreta."})
+    if mfa.check_code(mfa.decrypt(ctx.user.mfa_secret_enc or "") or "", body.code, ctx.user.mfa_last_step) is None:
+        raise HTTPException(400, {"code": "invalid_code", "message": "Código inválido."})
+    ctx.user.mfa_enabled_at = None
+    ctx.user.mfa_secret_enc = None
+    ctx.user.mfa_last_step = None
+    audit.record(db, "mfa_disabled", "success", actor_id=ctx.user.id, ip=client_ip(request))
+    db.commit()
+    return MessageOut(message="Verificação em duas etapas desativada.")

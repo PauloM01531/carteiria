@@ -9,10 +9,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import admin, auth, bills, cards, categories, health, me, planning, reports, transactions
 from app.config import get_settings
+from app.security.rate_limit import limiter
 
 log = logging.getLogger("carteiria")
 
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+MAX_BODY_BYTES = 256 * 1024
+GLOBAL_LIMIT, GLOBAL_WINDOW = 600, 300  # 600 requisições a cada 5 minutos por IP
 
 
 def create_app() -> FastAPI:
@@ -33,6 +36,18 @@ def create_app() -> FastAPI:
         if request.method in UNSAFE and origin and origin not in s.allowed_origins:
             return JSONResponse(
                 {"detail": {"code": "bad_origin", "message": "Origem não permitida."}}, status_code=403
+            )
+        # Limite de tamanho do corpo (nenhuma rota precisa de mais que isso).
+        length = request.headers.get("content-length")
+        if length and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
+            return JSONResponse({"detail": {"code": "too_large", "message": "Requisição grande demais."}}, status_code=413)
+        # Limite global por IP contra abuso de endpoints.
+        if request.url.path.startswith("/api/") and not limiter.hit(
+            f"global:{request.client.host if request.client else '-'}", GLOBAL_LIMIT, GLOBAL_WINDOW
+        ):
+            return JSONResponse(
+                {"detail": {"code": "rate_limited", "message": "Muitas requisições. Aguarde um pouco."}},
+                status_code=429, headers={"Retry-After": str(GLOBAL_WINDOW)},
             )
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"

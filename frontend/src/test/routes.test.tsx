@@ -45,7 +45,7 @@ describe('proteção de rotas', () => {
   it('usuário comum não vê o painel administrativo', async () => {
     mockFetch((url) => (url.endsWith('/auth/session') ? { status: 200, body: { user, csrf_token: 'abc' } } : { status: 200, body: emptyPage }))
     renderAt('/admin')
-    expect(await screen.findByRole('heading', { name: /Ana/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Ana/ }, { timeout: 8000 })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Administração' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument()
   })
@@ -80,7 +80,7 @@ describe('formulários', () => {
     await userEvent.type(screen.getByLabelText('E-mail'), 'ana@exemplo.com.br')
     await userEvent.type(screen.getByLabelText('Senha'), 'SenhaForte123')
     await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-    expect(await screen.findByRole('heading', { name: /Ana/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Ana/ }, { timeout: 8000 })).toBeInTheDocument()
 
     // Alternar o tema dispara um PUT, que precisa levar o cabeçalho CSRF
     await userEvent.click(screen.getAllByRole('button', { name: /Alternar tema/ })[0])

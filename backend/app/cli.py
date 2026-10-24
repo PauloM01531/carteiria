@@ -41,6 +41,31 @@ def promote_admin(email: str) -> int:
         return 0
 
 
+def reset_mfa(email: str) -> int:
+    """Recuperação: remove o MFA de uma conta (ex.: celular perdido) e encerra as sessões dela."""
+    from sqlalchemy import update
+
+    from app.models import UserSession
+    from app.services.sessions import utcnow
+
+    with Session(get_owner_engine()) as db:
+        user = db.scalar(select(User).where(User.email == email.lower()))
+        if user is None:
+            print("Conta não encontrada.")
+            return 1
+        if input(f"Remover a verificação em duas etapas de <{user.email}>? Digite SIM: ").strip().lstrip("\ufeff").upper() != "SIM":
+            print("Cancelado.")
+            return 1
+        user.mfa_enabled_at = None
+        user.mfa_secret_enc = None
+        user.mfa_last_step = None
+        db.execute(update(UserSession).where(UserSession.user_id == user.id, UserSession.revoked_at.is_(None)).values(revoked_at=utcnow()))
+        audit.record(db, "mfa_reset", "success", target_user_id=user.id, actor_email="cli-servidor")
+        db.commit()
+        print("MFA removido. A pessoa deve configurar novamente ao entrar.")
+        return 0
+
+
 def registration_mode(mode: str) -> int:
     with Session(get_owner_engine()) as db:
         set_registration_mode(db, mode)
@@ -55,11 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("promote-admin")
     a.add_argument("email")
+    r = sub.add_parser("reset-mfa")
+    r.add_argument("email")
     m = sub.add_parser("registration-mode")
     m.add_argument("mode", choices=["closed", "approval", "invite"])
     args = p.parse_args(argv)
     if args.cmd == "promote-admin":
         return promote_admin(args.email)
+    if args.cmd == "reset-mfa":
+        return reset_mfa(args.email)
     return registration_mode(args.mode)
 
 

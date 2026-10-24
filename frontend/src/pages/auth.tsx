@@ -21,9 +21,11 @@ const messageFor = (e: unknown) => (e instanceof Error ? e.message : 'Erro inesp
 
 // ------------------------------------------------------------------ Entrar
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, loginMfa } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string | null>>({})
@@ -41,9 +43,13 @@ export function LoginPage() {
     setError(null)
     setCode(null)
     try {
-      await login(email.trim(), password)
-      const from = (location.state as { from?: string } | null)?.from
-      navigate(from && from.startsWith('/') ? from : '/painel', { replace: true })
+      const r = await login(email.trim(), password)
+      if (r.challenge) {
+        setChallenge(r.challenge)
+        setPassword('')
+        return
+      }
+      goNext()
     } catch (err) {
       setError(messageFor(err))
       if (err instanceof ApiError) setCode(err.code)
@@ -52,9 +58,43 @@ export function LoginPage() {
     }
   }
 
+  function goNext() {
+    const from = (location.state as { from?: string } | null)?.from
+    navigate(from && from.startsWith('/') ? from : '/painel', { replace: true })
+  }
+
+  async function onSubmitCode(e: FormEvent) {
+    e.preventDefault()
+    if (!/^\d{6}$/.test(mfaCode.trim())) return setError('Digite os 6 números do aplicativo.')
+    setLoading(true)
+    setError(null)
+    try {
+      await loginMfa(challenge!, mfaCode.trim())
+      goNext()
+    } catch (err) {
+      setError(messageFor(err))
+      if (err instanceof ApiError && err.code === 'invalid_challenge') setChallenge(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function resend() {
     await api('/auth/resend-verification', { method: 'POST', body: { email: email.trim() } }).catch(() => undefined)
     setResent(true)
+  }
+
+  if (challenge) {
+    return (
+      <AuthShell title="Verificação em duas etapas" subtitle="Abra o aplicativo autenticador e digite o código de 6 números.">
+        <form onSubmit={onSubmitCode} noValidate className="flex flex-col gap-4">
+          {error && <Alert kind="error">{error}</Alert>}
+          <Field label="Código" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))} autoFocus />
+          <Button type="submit" loading={loading}>Confirmar</Button>
+          <button type="button" className="text-sm font-semibold text-muted underline" onClick={() => { setChallenge(null); setMfaCode(''); setError(null) }}>Voltar</button>
+        </form>
+      </AuthShell>
+    )
   }
 
   return (

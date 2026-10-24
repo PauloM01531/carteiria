@@ -1,7 +1,9 @@
 /** Painel administrativo. A proteção real está no backend (papel ADMIN verificado em toda rota). */
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Alert, Button, Card, ConfirmDialog, EmptyState, Field, Spinner, cx } from '../../components/ui'
-import { api } from '../../lib/api'
+import { Link } from 'react-router-dom'
+import { useReauth } from '../../components/security'
+import { api, ApiError } from '../../lib/api'
 import { formatDate, formatDateTime } from '../../lib/format'
 import { validateEmail } from '../../lib/validation'
 
@@ -62,6 +64,12 @@ const ACTION_LABEL: Record<string, string> = {
   password_reset: 'Senha redefinida',
   password_changed: 'Senha alterada',
   account_deleted: 'Conta excluída',
+  mfa_enabled: 'Verificação em duas etapas ativada',
+  mfa_disabled: 'Verificação em duas etapas desativada',
+  mfa_failed: 'Código de verificação inválido',
+  mfa_reset: 'Verificação em duas etapas removida (servidor)',
+  reauthenticated: 'Identidade confirmada',
+  data_exported: 'Dados exportados',
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -77,6 +85,7 @@ function Overview() {
   const [pendingMode, setPendingMode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const reauth = useReauth()
 
   useEffect(() => {
     api<typeof stats>('/admin/stats').then(setStats).catch((e) => setError(msg(e)))
@@ -87,8 +96,8 @@ function Overview() {
     if (!pendingMode) return
     setSaving(true)
     try {
-      const r = await api<{ mode: string }>('/admin/registration-mode', { method: 'PUT', body: { mode: pendingMode } })
-      setMode(r.mode)
+      const target = pendingMode
+      await reauth.run(() => api<{ mode: string }>('/admin/registration-mode', { method: 'PUT', body: { mode: target } }).then((r) => setMode(r.mode)))
     } catch (e) {
       setError(msg(e))
     } finally {
@@ -147,6 +156,7 @@ function Overview() {
       >
         O modo passará a ser <strong>{pendingMode && MODE_INFO[pendingMode].label}</strong>. A alteração fica registrada na auditoria.
       </ConfirmDialog>
+      {reauth.dialog}
     </div>
   )
 }
@@ -174,6 +184,7 @@ function Users() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<{ user: AdminUser; action: UserAction } | null>(null)
   const [busy, setBusy] = useState(false)
+  const reauth = useReauth()
 
   const load = useCallback(() => {
     const params = new URLSearchParams()
@@ -192,8 +203,8 @@ function Users() {
     if (!pending) return
     setBusy(true)
     try {
-      await api(`/admin/users/${pending.user.id}/${pending.action}`, { method: 'POST' })
-      load()
+      const { user: target, action } = pending
+      await reauth.run(() => api(`/admin/users/${target.id}/${action}`, { method: 'POST' }).then(load))
     } catch (e) {
       setError(msg(e))
     } finally {
@@ -260,6 +271,7 @@ function Users() {
         {pending && `${ACTION_TEXT[pending.action].question} ${pending.user.display_name} (${pending.user.email})?`}
         {pending?.action === 'suspend' && ' Todas as sessões dessa pessoa serão encerradas imediatamente.'}
       </ConfirmDialog>
+      {reauth.dialog}
     </div>
   )
 }
@@ -274,6 +286,7 @@ function Invites() {
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
   const [revoking, setRevoking] = useState<Invite | null>(null)
+  const reauth = useReauth()
 
   const load = () => api<Invite[]>('/admin/invites').then(setItems).catch((e) => setError(msg(e)))
   useEffect(() => {
@@ -289,10 +302,14 @@ function Invites() {
     setError(null)
     setCopied(false)
     try {
-      const r = await api<{ link: string }>('/admin/invites', { method: 'POST', body: { email: email.trim() } })
-      setLink(r.link)
-      setEmail('')
-      load()
+      const target = email.trim()
+      await reauth.run(() =>
+        api<{ link: string }>('/admin/invites', { method: 'POST', body: { email: target } }).then((r) => {
+          setLink(r.link)
+          setEmail('')
+          load()
+        }),
+      )
     } catch (err) {
       setError(msg(err))
     } finally {
@@ -303,8 +320,8 @@ function Invites() {
   async function revoke() {
     if (!revoking) return
     try {
-      await api(`/admin/invites/${revoking.id}`, { method: 'DELETE' })
-      load()
+      const id = revoking.id
+      await reauth.run(() => api(`/admin/invites/${id}`, { method: 'DELETE' }).then(load))
     } catch (e) {
       setError(msg(e))
     } finally {
@@ -371,6 +388,7 @@ function Invites() {
       <ConfirmDialog open={!!revoking} title="Revogar convite?" confirmLabel="Revogar" danger onConfirm={revoke} onCancel={() => setRevoking(null)}>
         O link enviado para {revoking?.email} deixará de funcionar.
       </ConfirmDialog>
+      {reauth.dialog}
     </div>
   )
 }
@@ -412,6 +430,29 @@ const TABS = [
 
 export default function AdminPage() {
   const [tab, setTab] = useState('overview')
+  const [gate, setGate] = useState<string | null>(null)
+  const [checked, setChecked] = useState(false)
+  useEffect(() => {
+    api('/admin/stats')
+      .catch((e) => {
+        if (e instanceof ApiError && (e.code === 'mfa_setup_required' || e.code === 'mfa_required')) setGate(e.code)
+      })
+      .finally(() => setChecked(true))
+  }, [])
+  if (!checked) return <Spinner />
+  if (gate) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="font-display text-3xl font-semibold tracking-tight">Administração</h1>
+        <Alert kind="info">
+          {gate === 'mfa_setup_required'
+            ? 'Para proteger a plataforma, a administração exige verificação em duas etapas. Ative-a no seu Perfil e volte aqui.'
+            : 'Esta sessão foi aberta sem o código do aplicativo autenticador. Saia e entre novamente para usar a administração.'}
+        </Alert>
+        {gate === 'mfa_setup_required' && <Link to="/perfil" className="font-semibold underline">Ir para o Perfil</Link>}
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col gap-6">
       <header>

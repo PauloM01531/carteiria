@@ -8,19 +8,22 @@ from sqlalchemy.orm import Session
 from app.api.deps import AuthContext, client_ip, get_auth, session_cookie_name
 from app.config import get_settings
 from app.db import get_db
-from app.models import Invite, User
+from app.models import AuthToken, Invite, User
 from app.schemas import (
     ChangePasswordIn,
     EmailIn,
     LoginIn,
     MessageOut,
+    MfaChallengeOut,
+    MfaLoginIn,
+    ReauthIn,
     RegisterIn,
     ResetPasswordIn,
     SessionOut,
     TokenIn,
     UserOut,
 )
-from app.security import passwords
+from app.security import mfa, passwords
 from app.security.rate_limit import enforce
 from app.security.tokens import csrf_for_session, hash_token
 from app.services import audit, auth_tokens, sessions
@@ -167,8 +170,8 @@ def resend_verification(body: EmailIn, request: Request, db: Session = Depends(g
     return MessageOut(message=GENERIC_REGISTER)
 
 
-@router.post("/login", response_model=SessionOut)
-def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)) -> SessionOut:
+@router.post("/login", response_model=SessionOut | MfaChallengeOut)
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     ip = client_ip(request)
     email = str(body.email).lower()
     enforce(f"login:ip:{ip}", limit=30, window_seconds=15 * 60)
@@ -194,12 +197,62 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
 
     if passwords.needs_rehash(user.password_hash):
         user.password_hash = passwords.hash_password(body.password)
+    if user.mfa_enabled:
+        # Senha correta, mas falta o segundo fator: nenhuma sessão é criada ainda.
+        challenge = auth_tokens.issue(db, user.id, "mfa_challenge", timedelta(minutes=5))
+        db.commit()
+        return MfaChallengeOut(challenge=challenge)
+    return _finish_login(db, user, request, response, mfa_verified=False)
+
+
+def _finish_login(db: Session, user: User, request: Request, response: Response, mfa_verified: bool) -> SessionOut:
+    ip = client_ip(request)
     user.last_login_at = sessions.utcnow()
-    token = sessions.create_session(db, user, request.headers.get("user-agent"), ip)
-    audit.record(db, "login", "success", actor_id=user.id, ip=ip)
+    token = sessions.create_session(db, user, request.headers.get("user-agent"), ip, mfa_verified=mfa_verified)
+    audit.record(db, "login", "success", actor_id=user.id, details={"mfa": mfa_verified}, ip=ip)
     db.commit()
     _set_session_cookie(response, token)
     return SessionOut(user=UserOut.model_validate(user), csrf_token=csrf_for_session(token))
+
+
+@router.post("/login/mfa", response_model=SessionOut)
+def login_mfa(body: MfaLoginIn, request: Request, response: Response, db: Session = Depends(get_db)) -> SessionOut:
+    ip = client_ip(request)
+    enforce(f"mfa:ip:{ip}", limit=20, window_seconds=15 * 60)
+    tok = db.scalar(select(AuthToken).where(AuthToken.token_hash == hash_token(body.challenge),
+                                            AuthToken.purpose == "mfa_challenge"))
+    if tok is None or tok.used_at or tok.expires_at <= sessions.utcnow():
+        raise _err(401, "invalid_challenge", "A verificação expirou. Entre novamente.")
+    enforce(f"mfa:user:{tok.user_id}", limit=5, window_seconds=15 * 60)
+    user = db.get(User, tok.user_id)
+    assert user is not None
+    step = mfa.check_code(mfa.decrypt(user.mfa_secret_enc or "") or "", body.code, user.mfa_last_step)
+    if step is None:
+        audit.record(db, "mfa_failed", "failure", actor_id=user.id, ip=ip)
+        db.commit()
+        raise _err(401, "invalid_code", "Código inválido. Confira o aplicativo autenticador.")
+    if user.status != "active":
+        raise _err(403, user.status, "Sua conta não está ativa.")
+    tok.used_at = sessions.utcnow()
+    user.mfa_last_step = step
+    return _finish_login(db, user, request, response, mfa_verified=True)
+
+
+@router.post("/reauth", response_model=MessageOut)
+def reauth(body: ReauthIn, request: Request, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> MessageOut:
+    """Confirma a identidade de novo (senha + código, quando houver MFA) para operações críticas."""
+    enforce(f"reauth:user:{ctx.user.id}", limit=5, window_seconds=15 * 60)
+    if not passwords.verify_password(ctx.user.password_hash, body.password):
+        raise _err(400, "invalid_password", "Senha incorreta.")
+    if ctx.user.mfa_enabled:
+        step = mfa.check_code(mfa.decrypt(ctx.user.mfa_secret_enc or "") or "", body.code or "", ctx.user.mfa_last_step)
+        if step is None:
+            raise _err(400, "invalid_code", "Código inválido.")
+        ctx.user.mfa_last_step = step
+    ctx.session.reauth_at = sessions.utcnow()
+    audit.record(db, "reauthenticated", "success", actor_id=ctx.user.id, ip=client_ip(request))
+    db.commit()
+    return MessageOut(message="Identidade confirmada.")
 
 
 @router.post("/logout", response_model=MessageOut)

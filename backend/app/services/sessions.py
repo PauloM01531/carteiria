@@ -14,8 +14,9 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def create_session(db: Session, user: User, user_agent: str | None, ip: str | None) -> str:
-    """Cria a sessão e devolve o token em claro (vai somente para o cookie HttpOnly)."""
+def create_session(db: Session, user: User, user_agent: str | None, ip: str | None, mfa_verified: bool = False) -> str:
+    """Cria a sessão e devolve o token em claro (vai somente para o cookie HttpOnly).
+    O login conta como autenticação recente (reauth_at = agora)."""
     token = new_token()
     db.add(
         UserSession(
@@ -24,6 +25,8 @@ def create_session(db: Session, user: User, user_agent: str | None, ip: str | No
             expires_at=utcnow() + timedelta(hours=get_settings().session_absolute_hours),
             user_agent=(user_agent or "")[:200] or None,
             ip=ip,
+            mfa_verified=mfa_verified,
+            reauth_at=utcnow(),
         )
     )
     db.flush()

@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, LargeBinary, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, LargeBinary, String, func, text
 from sqlalchemy.dialects.postgresql import CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,7 +10,7 @@ from app.models.base import Base, created_at_col
 
 ROLES = ("USER", "ADMIN")
 STATUSES = ("pending_approval", "active", "suspended", "rejected")
-TOKEN_PURPOSES = ("verify_email", "reset_password")
+TOKEN_PURPOSES = ("verify_email", "reset_password", "mfa_challenge")
 
 
 class User(Base):
@@ -37,6 +37,15 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    # MFA por aplicativo autenticador (TOTP). O segredo fica cifrado (Fernet) com chave derivada da SECRET_KEY.
+    mfa_secret_enc: Mapped[str | None] = mapped_column(String(255))
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mfa_last_step: Mapped[int | None] = mapped_column()  # impede reutilizar o mesmo código
+
+    @property
+    def mfa_enabled(self) -> bool:
+        return self.mfa_enabled_at is not None
+
     sessions: Mapped[list["UserSession"]] = relationship(
         back_populates="user", passive_deletes=True
     )
@@ -62,6 +71,9 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     user_agent: Mapped[str | None] = mapped_column(String(200))
     ip: Mapped[str | None] = mapped_column(String(64))
+    # Sessão aberta com o segundo fator confirmado e última confirmação de identidade (reautenticação).
+    mfa_verified: Mapped[bool] = mapped_column(nullable=False, server_default=text("false"))
+    reauth_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="sessions")
 

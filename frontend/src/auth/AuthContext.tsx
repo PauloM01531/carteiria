@@ -8,6 +8,7 @@ export interface User {
   role: 'USER' | 'ADMIN'
   status: string
   created_at: string
+  mfa_enabled?: boolean
 }
 
 interface SessionResponse {
@@ -18,7 +19,9 @@ interface SessionResponse {
 interface AuthState {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  /** Retorna o desafio quando a conta exige o código do aplicativo autenticador. */
+  login: (email: string, password: string) => Promise<{ challenge?: string }>
+  loginMfa: (challenge: string, code: string) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
   setUser: (u: User | null) => void
@@ -59,7 +62,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clear])
 
   const login = useCallback(async (email: string, password: string) => {
-    const s = await api<SessionResponse>('/auth/login', { method: 'POST', body: { email, password }, skipAuthRedirect: true })
+    const s = await api<SessionResponse | { mfa_required: true; challenge: string }>('/auth/login', {
+      method: 'POST',
+      body: { email, password },
+      skipAuthRedirect: true,
+    })
+    if ('challenge' in s) return { challenge: s.challenge }
+    setCsrfToken(s.csrf_token)
+    setUser(s.user)
+    return {}
+  }, [])
+
+  const loginMfa = useCallback(async (challenge: string, code: string) => {
+    const s = await api<SessionResponse>('/auth/login/mfa', { method: 'POST', body: { challenge, code }, skipAuthRedirect: true })
     setCsrfToken(s.csrf_token)
     setUser(s.user)
   }, [])
@@ -72,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clear])
 
-  const value = useMemo(() => ({ user, loading, login, logout, refresh, setUser }), [user, loading, login, logout, refresh])
+  const value = useMemo(() => ({ user, loading, login, loginMfa, logout, refresh, setUser }), [user, loading, login, loginMfa, logout, refresh])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

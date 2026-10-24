@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth, type User } from '../auth/AuthContext'
 import { Alert, Button, Card, ConfirmDialog, Field, PasswordStrength, Spinner } from '../components/ui'
+import { MfaCard } from '../components/security'
 import { api } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
 import { applyTheme, type Theme } from '../lib/theme'
@@ -289,6 +290,7 @@ export default function Profile() {
       <ProfileCard />
       <PreferencesCard />
       <PasswordCard />
+      <MfaCard />
       <SessionsCard />
       <DangerCard />
     </div>
