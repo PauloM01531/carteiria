@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/fraunces";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Identidade CarteirIA: petróleo profundo + latão, papel quente. */
+:root {
+  --bg: #f6f3ec;
+  --surface: #fffdf8;
+  --surface-2: #efeadf;
+  --border: #e2dccd;
+  --text: #1a2a2c;
+  --muted: #5f6b6a;
+  --brand: #0f2a2e;
+  --brand-contrast: #f6f3ec;
+  --accent: #c98a16;
+  --accent-soft: #f6e3b8;
+  --positive: #1d7a52;
+  --negative: #b8432c;
+  --focus: #c98a16;
+}
+
+.dark {
+  --bg: #0b1517;
+  --surface: #11201f;
+  --surface-2: #172a29;
+  --border: #23393a;
+  --text: #eae6dc;
+  --muted: #9aa8a5;
+  --brand: #f2b544;
+  --brand-contrast: #0b1517;
+  --accent: #f2b544;
+  --accent-soft: #3a2f16;
+  --positive: #4cc18b;
+  --negative: #ef7a62;
+  --focus: #f2b544;
+}
+
+@theme inline {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
