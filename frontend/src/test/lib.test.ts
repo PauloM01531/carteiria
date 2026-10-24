@@ -49,3 +49,13 @@ describe('erros da API', () => {
     expect(parseError(429, null).code).toBe('rate_limited')
   })
 })
+
+import { formatPct } from '../lib/reports'
+
+describe('percentuais', () => {
+  it('formata variação e trata ausência de base', () => {
+    expect(formatPct('12.5')).toBe('+12,5%')
+    expect(formatPct('-3.0')).toBe('-3,0%')
+    expect(formatPct(null)).toBe('sem base de comparação')
+  })
+})

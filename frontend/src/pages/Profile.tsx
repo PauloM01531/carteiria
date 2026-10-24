@@ -241,9 +241,12 @@ function DangerCard() {
     <Card className="border-negative/40">
       <h2 className="font-display text-xl font-semibold">Seus dados</h2>
       <p className="mt-1 text-sm text-muted">
-        A exportação completa dos seus dados chega junto com os lançamentos financeiros. A exclusão remove definitivamente sua conta e todos os
-        registros associados.
+        Baixe todos os seus dados (lançamentos, cartões, faturas, contas, orçamentos e metas) em planilhas CSV. A exclusão remove
+        definitivamente sua conta e todos os registros associados.
       </p>
+      <a href="/api/v1/export/all.zip" download className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold hover:bg-surface-2">
+        Exportar meus dados (ZIP)
+      </a>
       {user?.role === 'ADMIN' ? (
         <p className="mt-4 text-sm text-muted">A conta do administrador principal não pode ser excluída por aqui.</p>
       ) : (
@@ -270,6 +273,8 @@ function QuickLinks() {
   const { user } = useAuth()
   return (
     <div className="flex flex-wrap gap-2 lg:hidden">
+      <Link to="/relatorios" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Relatórios</Link>
+      <Link to="/orcamentos" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Orçamentos e metas</Link>
       <Link to="/categorias" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Categorias</Link>
       {user?.role === 'ADMIN' && <Link to="/admin" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Administração</Link>}
     </div>

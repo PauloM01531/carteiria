@@ -13,6 +13,7 @@ from app.models.cards import (
     RecurringBill,
     StatementPayment,
 )
+from app.models.planning import Budget, Goal, GoalContribution
 
 __all__ = [
     "Base",
@@ -32,4 +33,7 @@ __all__ = [
     "StatementPayment",
     "RecurringBill",
     "BillOccurrence",
+    "Budget",
+    "Goal",
+    "GoalContribution",
 ]

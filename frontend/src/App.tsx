@@ -16,6 +16,8 @@ const CardsPage = lazy(() => import('./pages/cards/CardsPage'))
 const StatementPage = lazy(() => import('./pages/cards/StatementPage'))
 const BillsPage = lazy(() => import('./pages/bills/BillsPage'))
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage'))
+const PlanningPage = lazy(() => import('./pages/PlanningPage'))
 
 export function AppRoutes() {
   return (
@@ -39,6 +41,8 @@ export function AppRoutes() {
           <Route path="/cartoes/faturas/:id" element={<StatementPage />} />
           <Route path="/contas" element={<BillsPage />} />
           <Route path="/categorias" element={<CategoriesPage />} />
+          <Route path="/relatorios" element={<ReportsPage />} />
+          <Route path="/orcamentos" element={<PlanningPage />} />
           <Route path="/perfil" element={<Profile />} />
           <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         </Route>
