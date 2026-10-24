@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth, type User } from '../auth/AuthContext'
 import { Alert, Button, Card, ConfirmDialog, Field, PasswordStrength, Spinner } from '../components/ui'
 import { api } from '../lib/api'
@@ -265,10 +265,22 @@ function DangerCard() {
   )
 }
 
+/** Atalhos para telas que não cabem na navegação do celular. */
+function QuickLinks() {
+  const { user } = useAuth()
+  return (
+    <div className="flex flex-wrap gap-2 lg:hidden">
+      <Link to="/categorias" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Categorias</Link>
+      {user?.role === 'ADMIN' && <Link to="/admin" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Administração</Link>}
+    </div>
+  )
+}
+
 export default function Profile() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Perfil</h1>
+      <QuickLinks />
       <ProfileCard />
       <PreferencesCard />
       <PasswordCard />

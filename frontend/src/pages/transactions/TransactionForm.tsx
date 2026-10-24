@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Alert, Button, ConfirmDialog, Field, Segmented, SelectField, TextareaField } from '../../components/ui'
 import { api, ApiError } from '../../lib/api'
 import { todayISO } from '../../lib/dates'
@@ -131,6 +132,12 @@ export function TransactionForm({ categories, initial, defaultKind = 'expense', 
           ))}
         </SelectField>
       </div>
+      {kind === 'expense' && method === 'credito' && !initial && (
+        <Alert kind="info">
+          Compras no cartão de crédito ficam melhor em <Link to="/cartoes" className="font-semibold underline">Cartões › Nova compra</Link>:
+          lá elas são parceladas e distribuídas nas faturas, sem contar duas vezes.
+        </Alert>
+      )}
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold">Situação</span>
         <Segmented

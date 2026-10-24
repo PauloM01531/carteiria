@@ -12,6 +12,10 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Profile = lazy(() => import('./pages/Profile'))
 const TransactionsPage = lazy(() => import('./pages/transactions/TransactionsPage'))
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
+const CardsPage = lazy(() => import('./pages/cards/CardsPage'))
+const StatementPage = lazy(() => import('./pages/cards/StatementPage'))
+const BillsPage = lazy(() => import('./pages/bills/BillsPage'))
+const CategoriesPage = lazy(() => import('./pages/CategoriesPage'))
 
 export function AppRoutes() {
   return (
@@ -31,6 +35,10 @@ export function AppRoutes() {
         <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route path="/painel" element={<Dashboard />} />
           <Route path="/lancamentos" element={<TransactionsPage />} />
+          <Route path="/cartoes" element={<CardsPage />} />
+          <Route path="/cartoes/faturas/:id" element={<StatementPage />} />
+          <Route path="/contas" element={<BillsPage />} />
+          <Route path="/categorias" element={<CategoriesPage />} />
           <Route path="/perfil" element={<Profile />} />
           <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         </Route>

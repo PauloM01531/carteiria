@@ -3,15 +3,13 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_auth
 from app.db import get_db
-from app.models import Category, Transaction
+from app.models import Transaction
 from app.schemas import MessageOut
 from app.schemas_finance import (
-    CategoryOut,
     Kind,
     PaymentMethod,
     Totals,
@@ -32,22 +30,6 @@ def _out(tx: Transaction) -> TransactionOut:
         category_id=tx.category_id, category_name=tx.category.name, payment_method=tx.payment_method,
         status=tx.status, notes=tx.notes, created_at=tx.created_at, updated_at=tx.updated_at,
     )
-
-
-@router.get("/categories", response_model=list[CategoryOut])
-def list_categories(
-    kind: Kind | None = None,
-    include_inactive: bool = False,
-    ctx: AuthContext = Depends(get_auth),
-    db: Session = Depends(get_db),
-) -> list[CategoryOut]:
-    stmt = select(Category).where(or_(Category.user_id.is_(None), Category.user_id == ctx.user.id))
-    if kind:
-        stmt = stmt.where(Category.kind == kind)
-    if not include_inactive:
-        stmt = stmt.where(Category.active.is_(True))
-    rows = db.scalars(stmt.order_by(Category.kind, Category.name)).all()
-    return [CategoryOut(id=c.id, name=c.name, kind=c.kind, active=c.active, is_system=c.user_id is None) for c in rows]
 
 
 def _filters(

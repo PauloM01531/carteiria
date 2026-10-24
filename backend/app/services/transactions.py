@@ -134,5 +134,12 @@ def update(db: Session, user_id: uuid.UUID, tx_id: uuid.UUID, changes: dict) -> 
 
 
 def delete(db: Session, user_id: uuid.UUID, tx_id: uuid.UUID) -> None:
+    from app.models import BillOccurrence
+
     tx = get_owned(db, user_id, tx_id)
+    # Se o lançamento era o pagamento de uma conta recorrente, a conta volta a ficar pendente.
+    for occ in db.scalars(select(BillOccurrence).where(BillOccurrence.transaction_id == tx.id,
+                                                       BillOccurrence.user_id == user_id)):
+        occ.status, occ.paid_on, occ.transaction_id = "pending", None, None
+    db.flush()
     db.delete(tx)

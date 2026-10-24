@@ -48,6 +48,9 @@ export function PublicLayout() {
 const icons = {
   painel: 'M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z',
   lancamentos: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
+  cartoes: 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm-1 4v3h20V9zm3 6v2h5v-2z',
+  contas: 'M7 2h10l4 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 8v2h8v-2zm0 4v2h8v-2zm0-8v2h5V6z',
+  categorias: 'M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z',
   perfil: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z',
   admin: 'M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5z',
 }
@@ -66,8 +69,11 @@ export function AppLayout() {
   const items = [
     { to: '/painel', label: 'Painel', icon: icons.painel },
     { to: '/lancamentos', label: 'Lançamentos', icon: icons.lancamentos },
+    { to: '/cartoes', label: 'Cartões', icon: icons.cartoes },
+    { to: '/contas', label: 'Contas', icon: icons.contas },
+    { to: '/categorias', label: 'Categorias', icon: icons.categorias, desktopOnly: true },
     { to: '/perfil', label: 'Perfil', icon: icons.perfil },
-    ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: icons.admin }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: icons.admin, desktopOnly: true }] : []),
   ]
   async function onLogout() {
     await logout()
@@ -128,12 +134,12 @@ export function AppLayout() {
         aria-label="Navegação principal"
         className="fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
       >
-        {items.map((i) => (
+        {items.filter((i) => !('desktopOnly' in i && i.desktopOnly)).map((i) => (
           <NavLink
             key={i.to}
             to={i.to}
             className={({ isActive }) =>
-              cx('flex min-w-16 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold', isActive ? 'text-accent' : 'text-muted')
+              cx('flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-semibold', isActive ? 'text-accent' : 'text-muted')
             }
           >
             <NavIcon d={i.icon} />

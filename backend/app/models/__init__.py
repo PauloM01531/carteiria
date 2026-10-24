@@ -4,6 +4,15 @@ from app.models.identity import AuthToken, User, UserSession
 from app.models.admin import AppSetting, AuditLog, Invite
 from app.models.preferences import UserPreferences
 from app.models.finance import Category, Transaction
+from app.models.cards import (
+    BillOccurrence,
+    Card,
+    CardPurchase,
+    CardStatement,
+    Installment,
+    RecurringBill,
+    StatementPayment,
+)
 
 __all__ = [
     "Base",
@@ -16,4 +25,11 @@ __all__ = [
     "UserPreferences",
     "Category",
     "Transaction",
+    "Card",
+    "CardStatement",
+    "CardPurchase",
+    "Installment",
+    "StatementPayment",
+    "RecurringBill",
+    "BillOccurrence",
 ]
