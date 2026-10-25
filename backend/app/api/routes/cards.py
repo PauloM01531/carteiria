@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, get_auth
+from app.api.deps import AuthContext, get_auth, get_auth_synced
 from app.db import get_db
-from app.models import Card, CardPurchase, CardStatement, Installment, StatementPayment
+from app.models import Card, CardPurchase, CardStatement, CardSubscription, Installment, StatementPayment
 from app.schemas import MessageOut
 from app.schemas_cards import (
     CardCreate,
@@ -24,8 +24,12 @@ from app.schemas_cards import (
     StatementItemOut,
     StatementOut,
     StatementSuggestion,
+    SubscriptionCreate,
+    SubscriptionOut,
+    SubscriptionUpdate,
 )
 from app.services import cards as svc
+from app.services import subscriptions as subs
 from app.services.calendar import first_of_month
 
 router = APIRouter(tags=["cartões e faturas"])
@@ -43,7 +47,7 @@ def _card_out(db: Session, user_id: uuid.UUID, c: Card) -> CardOut:
 
 
 @router.get("/cards", response_model=list[CardOut])
-def list_cards(ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> list[CardOut]:
+def list_cards(ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)) -> list[CardOut]:
     rows = db.scalars(select(Card).where(Card.user_id == ctx.user.id).order_by(Card.active.desc(), Card.nickname)).all()
     return [_card_out(db, ctx.user.id, c) for c in rows]
 
@@ -60,7 +64,7 @@ def create_card(body: CardCreate, ctx: AuthContext = Depends(get_auth), db: Sess
 
 
 @router.get("/cards/{card_id}", response_model=CardOut)
-def get_card(card_id: uuid.UUID, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> CardOut:
+def get_card(card_id: uuid.UUID, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)) -> CardOut:
     return _card_out(db, ctx.user.id, svc.get_card(db, ctx.user.id, card_id))
 
 
@@ -91,7 +95,7 @@ def delete_card(card_id: uuid.UUID, ctx: AuthContext = Depends(get_auth), db: Se
 
 
 @router.get("/cards/{card_id}/suggest-statement", response_model=StatementSuggestion)
-def suggest(card_id: uuid.UUID, purchase_date: date, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def suggest(card_id: uuid.UUID, purchase_date: date, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     card = svc.get_card(db, ctx.user.id, card_id)
     ref = svc.suggest_reference_month(card.closing_day, purchase_date)
     closing, due = svc.statement_dates(card.closing_day, card.due_day, ref)
@@ -107,7 +111,7 @@ def _purchase_out(db: Session, p: CardPurchase) -> PurchaseOut:
         id=p.id, card_id=p.card_id, card_nickname=p.card.nickname, description=p.description,
         total_amount=p.total_amount, purchase_date=p.purchase_date, category_id=p.category_id,
         category_name=p.category.name, installments_count=p.installments_count,
-        first_statement_month=p.first_statement_month, notes=p.notes,
+        first_statement_month=p.first_statement_month, notes=p.notes, subscription_id=p.subscription_id,
         installments=[InstallmentOut(id=i.id, number=i.number, amount=i.amount, statement_id=i.statement_id,
                                      reference_month=refs[i.statement_id]) for i in p.installments],
     )
@@ -119,7 +123,7 @@ def list_purchases(
     start: date | None = None,
     end: date | None = None,
     limit: int = Query(default=100, ge=1, le=500),
-    ctx: AuthContext = Depends(get_auth),
+    ctx: AuthContext = Depends(get_auth_synced),
     db: Session = Depends(get_db),
 ) -> list[PurchaseOut]:
     stmt = select(CardPurchase).where(CardPurchase.user_id == ctx.user.id)
@@ -142,7 +146,7 @@ def create_purchase(body: PurchaseCreate, ctx: AuthContext = Depends(get_auth), 
 
 
 @router.get("/card-purchases/{purchase_id}", response_model=PurchaseOut)
-def get_purchase(purchase_id: uuid.UUID, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> PurchaseOut:
+def get_purchase(purchase_id: uuid.UUID, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)) -> PurchaseOut:
     return _purchase_out(db, svc.get_purchase(db, ctx.user.id, purchase_id))
 
 
@@ -187,7 +191,7 @@ def list_statements(
     card_id: uuid.UUID | None = None,
     start_month: date | None = None,
     end_month: date | None = None,
-    ctx: AuthContext = Depends(get_auth),
+    ctx: AuthContext = Depends(get_auth_synced),
     db: Session = Depends(get_db),
 ) -> list[StatementOut]:
     stmt = select(CardStatement).where(CardStatement.user_id == ctx.user.id)
@@ -202,7 +206,7 @@ def list_statements(
 
 
 @router.get("/statements/{statement_id}", response_model=StatementDetailOut)
-def get_statement(statement_id: uuid.UUID, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def get_statement(statement_id: uuid.UUID, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     st = svc.get_statement(db, ctx.user.id, statement_id)
     base = _statement_outs(db, ctx.user.id, [st])[0]
     inst = db.execute(
@@ -217,7 +221,7 @@ def get_statement(statement_id: uuid.UUID, ctx: AuthContext = Depends(get_auth),
         **base.model_dump(),
         items=[StatementItemOut(installment_id=i.id, purchase_id=p.id, description=p.description, purchase_date=p.purchase_date,
                                 category_name=p.category.name, number=i.number, installments_count=p.installments_count,
-                                amount=i.amount) for i, p in inst],
+                                amount=i.amount, is_subscription=p.subscription_id is not None) for i, p in inst],
         payments=[PaymentOut(id=p.id, amount=p.amount, paid_on=p.paid_on, notes=p.notes) for p in pays],
     )
 
@@ -237,3 +241,51 @@ def delete_payment(statement_id: uuid.UUID, payment_id: uuid.UUID, ctx: AuthCont
     svc.delete_payment(db, ctx.user.id, statement_id, payment_id)
     db.commit()
     return MessageOut(message="Pagamento removido.")
+
+
+# ---------------------------------------------------------------- assinaturas no cartão
+
+def _sub_out(s: CardSubscription) -> SubscriptionOut:
+    return SubscriptionOut(
+        id=s.id, card_id=s.card_id, card_nickname=s.card.nickname, description=s.description, amount=s.amount,
+        category_id=s.category_id, category_name=s.category.name, charge_day=s.charge_day, start_date=s.start_date,
+        end_date=s.end_date, active=s.active, notes=s.notes, next_charge=subs.next_charge(s),
+    )
+
+
+@router.get("/card-subscriptions", response_model=list[SubscriptionOut], summary="Assinaturas cobradas no cartão")
+def list_subscriptions(card_id: uuid.UUID | None = None, ctx: AuthContext = Depends(get_auth_synced),
+                       db: Session = Depends(get_db)) -> list[SubscriptionOut]:
+    stmt = select(CardSubscription).where(CardSubscription.user_id == ctx.user.id)
+    if card_id:
+        stmt = stmt.where(CardSubscription.card_id == card_id)
+    rows = db.scalars(stmt.order_by(CardSubscription.active.desc(), CardSubscription.description)).unique().all()
+    return [_sub_out(s) for s in rows]
+
+
+@router.post("/card-subscriptions", response_model=SubscriptionOut, status_code=201)
+def create_subscription(body: SubscriptionCreate, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> SubscriptionOut:
+    s = subs.create(db, ctx.user.id, body.model_dump())
+    out = _sub_out(s)
+    db.commit()
+    return out
+
+
+@router.patch("/card-subscriptions/{sub_id}", response_model=SubscriptionOut)
+def update_subscription(sub_id: uuid.UUID, body: SubscriptionUpdate, ctx: AuthContext = Depends(get_auth),
+                        db: Session = Depends(get_db)) -> SubscriptionOut:
+    changes = body.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        if v is None and k not in ("end_date", "notes"):
+            raise HTTPException(422, {"code": "validation_error", "message": "Campo obrigatório não pode ficar vazio."})
+    s = subs.update(db, ctx.user.id, sub_id, changes)
+    out = _sub_out(s)
+    db.commit()
+    return out
+
+
+@router.delete("/card-subscriptions/{sub_id}", response_model=MessageOut)
+def delete_subscription(sub_id: uuid.UUID, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> MessageOut:
+    subs.delete(db, ctx.user.id, sub_id)
+    db.commit()
+    return MessageOut(message="Assinatura cancelada. As cobranças já feitas continuam nas faturas.")

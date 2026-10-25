@@ -128,6 +128,7 @@ export default function StatementPage() {
                     <span className="block text-muted">
                       {formatDate(i.purchase_date)} · {i.category_name}
                       {i.installments_count > 1 && ` · parcela ${i.number}/${i.installments_count}`}
+                      {i.is_subscription && <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-ink">assinatura</span>}
                     </span>
                   </span>
                   <span className="tabular shrink-0 font-semibold">{formatBRL(i.amount)}</span>

@@ -36,6 +36,7 @@ export interface StatementItem {
   number: number
   installments_count: number
   amount: string
+  is_subscription?: boolean
 }
 
 export interface Payment {
@@ -62,7 +63,24 @@ export interface Purchase {
   installments_count: number
   first_statement_month: string
   notes: string | null
+  subscription_id?: string | null
   installments: { id: string; number: number; amount: string; statement_id: string; reference_month: string }[]
+}
+
+export interface Subscription {
+  id: string
+  card_id: string
+  card_nickname: string
+  description: string
+  amount: string
+  category_id: string
+  category_name: string
+  charge_day: number
+  start_date: string
+  end_date: string | null
+  active: boolean
+  notes: string | null
+  next_charge: string | null
 }
 
 export const STATEMENT_STATUS: Record<StatementStatus, { label: string; cls: string }> = {

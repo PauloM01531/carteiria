@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, get_auth
+from app.api.deps import AuthContext, get_auth, get_auth_synced
 from app.db import get_db
 from app.models import CardStatement
 from app.schemas_reports import (
@@ -51,12 +51,12 @@ def _filters(
 
 
 @router.get("/summary", response_model=SummaryOut, summary="Quanto entrou, quanto saiu, maior despesa e categoria líder")
-def summary(f: reports.Filters = Depends(_filters), ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def summary(f: reports.Filters = Depends(_filters), ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     return reports.summary(db, ctx.user.id, f)
 
 
 @router.get("/categories", response_model=list[CategoryShare], summary="Distribuição por categoria")
-def categories(f: reports.Filters = Depends(_filters), ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def categories(f: reports.Filters = Depends(_filters), ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     return reports.by_category(db, ctx.user.id, f, kind=f.kind or "expense")
 
 
@@ -67,7 +67,7 @@ def monthly(
     basis: Basis = "competencia",
     category_id: uuid.UUID | None = None,
     card_id: uuid.UUID | None = None,
-    ctx: AuthContext = Depends(get_auth),
+    ctx: AuthContext = Depends(get_auth_synced),
     db: Session = Depends(get_db),
 ):
     return reports.monthly(db, ctx.user.id, end_month or today(), months, basis, category_id, card_id)
@@ -80,7 +80,7 @@ def compare(
     basis: Basis = "competencia",
     category_id: uuid.UUID | None = None,
     card_id: uuid.UUID | None = None,
-    ctx: AuthContext = Depends(get_auth),
+    ctx: AuthContext = Depends(get_auth_synced),
     db: Session = Depends(get_db),
 ):
     b = first_of_month(month_b or today())
@@ -89,7 +89,7 @@ def compare(
 
 
 @router.get("/commitments", response_model=CommitmentsOut, summary="Faturas em aberto, parcelas futuras e contas previstas")
-def commitments(horizon_days: int = Query(default=30, ge=1, le=400), ctx: AuthContext = Depends(get_auth),
+def commitments(horizon_days: int = Query(default=30, ge=1, le=400), ctx: AuthContext = Depends(get_auth_synced),
                 db: Session = Depends(get_db)):
     out = reports.commitments(db, ctx.user.id, horizon_days=horizon_days)
     db.commit()
@@ -97,7 +97,7 @@ def commitments(horizon_days: int = Query(default=30, ge=1, le=400), ctx: AuthCo
 
 
 @dash.get("/dashboard", response_model=DashboardOut, summary="Todos os indicadores do painel de um mês")
-def dashboard(month: date | None = None, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def dashboard(month: date | None = None, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     uid = ctx.user.id
     m = first_of_month(month or today())
     period = reports.Filters(m, reports.month_end(m))

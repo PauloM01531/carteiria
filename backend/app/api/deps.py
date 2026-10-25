@@ -112,3 +112,13 @@ def require_recent_auth(ctx: AuthContext = Depends(require_admin)) -> AuthContex
             {"code": "reauth_required", "message": "Confirme sua identidade para continuar."},
         )
     return ctx
+
+
+def get_auth_synced(ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> AuthContext:
+    """Como get_auth, mas antes cria as cobranças pendentes das assinaturas no cartão,
+    para faturas, relatórios e painel já mostrarem os valores do mês."""
+    from app.services import subscriptions
+
+    if subscriptions.sync(db, ctx.user.id):
+        db.commit()
+    return ctx

@@ -2,10 +2,11 @@
 import { Link } from 'react-router-dom'
 import { Alert, Button, EmptyState, Modal, Spinner, cx } from '../../components/ui'
 import { api } from '../../lib/api'
-import { STATEMENT_STATUS, longMonth, type CreditCard, type Statement } from '../../lib/cards'
+import { STATEMENT_STATUS, longMonth, type CreditCard, type Statement, type Subscription } from '../../lib/cards'
 import type { Category } from '../../lib/finance'
 import { formatBRL, formatDate } from '../../lib/format'
 import { CardForm, PurchaseForm } from './forms'
+import { SubscriptionForm } from './SubscriptionForm'
 
 function LimitBar({ card }: { card: CreditCard }) {
   if (!card.credit_limit) return <p className="text-sm text-muted">Comprometido: {formatBRL(card.used_amount)}</p>
@@ -31,7 +32,8 @@ export default function CardsPage() {
   const [statements, setStatements] = useState<Statement[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [modal, setModal] = useState<null | { type: 'card'; card: CreditCard | null } | { type: 'purchase' }>(null)
+  const [subs, setSubs] = useState<Subscription[]>([])
+  const [modal, setModal] = useState<null | { type: 'card'; card: CreditCard | null } | { type: 'purchase' } | { type: 'sub'; sub: Subscription | null }>(null)
 
   const loadCards = useCallback(async () => {
     try {
@@ -47,7 +49,12 @@ export default function CardsPage() {
     if (!selected) return setStatements([])
     setStatements(null)
     try {
-      setStatements(await api<Statement[]>(`/statements?card_id=${selected}`))
+      const [st, ss] = await Promise.all([
+        api<Statement[]>(`/statements?card_id=${selected}`),
+        api<Subscription[]>(`/card-subscriptions?card_id=${selected}`),
+      ])
+      setStatements(st)
+      setSubs(ss)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar.')
     }
@@ -141,6 +148,39 @@ export default function CardsPage() {
                   Editar cartão
                 </Button>
               </div>
+              <section className="rounded-2xl border border-line bg-surface p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">Assinaturas neste cartão</h3>
+                    <p className="text-xs text-muted">Cobranças mensais que entram sozinhas em cada fatura.</p>
+                  </div>
+                  {card.active && (
+                    <Button variant="secondary" className="min-h-9 px-3" onClick={() => setModal({ type: 'sub', sub: null })}>
+                      + Assinatura
+                    </Button>
+                  )}
+                </div>
+                {subs.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted">Nenhuma assinatura. Cadastre streaming, apps ou academia para não precisar lançar todo mês.</p>
+                ) : (
+                  <ul className="mt-3 divide-y divide-line">
+                    {subs.map((s) => (
+                      <li key={s.id}>
+                        <button type="button" onClick={() => setModal({ type: 'sub', sub: s })} className={cx('flex w-full items-center justify-between gap-3 py-2.5 text-left text-sm hover:bg-surface-2', !s.active && 'opacity-60')}>
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{s.description}{!s.active && ' (pausada)'}</span>
+                            <span className="block text-muted">
+                              Todo dia {s.charge_day} · {s.category_name}
+                              {s.next_charge && ` · próxima cobrança ${formatDate(s.next_charge)}`}
+                            </span>
+                          </span>
+                          <span className="tabular shrink-0 whitespace-nowrap font-semibold">{formatBRL(s.amount)}/mês</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
               {statements === null ? (
                 <Spinner />
               ) : visible.length === 0 ? (
@@ -194,6 +234,11 @@ export default function CardsPage() {
       <Modal open={modal?.type === 'purchase'} title="Nova compra no cartão" onClose={close}>
         {modal?.type === 'purchase' && cards && (
           <PurchaseForm cards={cards} categories={categories} defaultCardId={card?.active ? card.id : undefined} onSaved={() => done('Compra registrada e distribuída nas faturas.')} onDeleted={() => done('Compra excluída.')} />
+        )}
+      </Modal>
+      <Modal open={modal?.type === 'sub'} title={modal?.type === 'sub' && modal.sub ? 'Editar assinatura' : 'Nova assinatura no cartão'} onClose={close}>
+        {modal?.type === 'sub' && cards && (
+          <SubscriptionForm cards={cards} categories={categories} initial={modal.sub} defaultCardId={card?.active ? card.id : undefined} onDone={done} />
         )}
       </Modal>
     </div>

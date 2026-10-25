@@ -147,7 +147,65 @@ class PurchaseOut(BaseModel):
     installments_count: int
     first_statement_month: date
     notes: str | None
+    subscription_id: uuid.UUID | None = None
     installments: list[InstallmentOut]
+
+
+# ---------------------------------------------------------------- assinaturas no cartão
+
+class SubscriptionCreate(In):
+    card_id: uuid.UUID
+    description: str
+    amount: MoneyIn
+    category_id: uuid.UUID
+    charge_day: Day
+    start_date: date
+    end_date: date | None = None
+    notes: str | None = None
+
+    _desc = field_validator("description")(lambda v: _clean_text(v, "a descrição", 200, True))
+    _notes = field_validator("notes")(lambda v: _clean_text(v, "as observações", 500, False))
+    _start = field_validator("start_date")(_check_date)
+    _end = field_validator("end_date")(lambda v: _check_date(v) if v else v)
+
+    @model_validator(mode="after")
+    def _period(self) -> "SubscriptionCreate":
+        if self.end_date and self.end_date < self.start_date:
+            raise ValueError("A data final deve ser posterior à inicial.")
+        return self
+
+
+class SubscriptionUpdate(In):
+    card_id: uuid.UUID | None = None
+    description: str | None = None
+    amount: MoneyIn | None = None
+    category_id: uuid.UUID | None = None
+    charge_day: Day | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    active: bool | None = None
+    notes: str | None = None
+
+    _desc = field_validator("description")(lambda v: _clean_text(v, "a descrição", 200, True))
+    _notes = field_validator("notes")(lambda v: _clean_text(v, "as observações", 500, False))
+    _start = field_validator("start_date")(lambda v: _check_date(v) if v else v)
+    _end = field_validator("end_date")(lambda v: _check_date(v) if v else v)
+
+
+class SubscriptionOut(BaseModel):
+    id: uuid.UUID
+    card_id: uuid.UUID
+    card_nickname: str
+    description: str
+    amount: Money
+    category_id: uuid.UUID
+    category_name: str
+    charge_day: int
+    start_date: date
+    end_date: date | None
+    active: bool
+    notes: str | None
+    next_charge: date | None
 
 
 # ---------------------------------------------------------------- faturas
@@ -178,6 +236,7 @@ class StatementItemOut(BaseModel):
     number: int
     installments_count: int
     amount: Money
+    is_subscription: bool = False
 
 
 class PaymentOut(BaseModel):

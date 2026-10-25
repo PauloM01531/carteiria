@@ -57,3 +57,25 @@ describe('formulário de compra parcelada', () => {
     })
   })
 })
+
+import { SubscriptionForm } from '../pages/cards/SubscriptionForm'
+
+describe('formulário de assinatura no cartão', () => {
+  it('sugere a categoria Assinaturas e envia o valor mensal como decimal', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify({ id: 's1', ...JSON.parse(String(init?.body)) }), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const onDone = vi.fn()
+    const categories = [...cats, { id: 'c9', name: 'Assinaturas', kind: 'expense' as const, active: true, is_system: true }]
+    render(<SubscriptionForm cards={[card]} categories={categories} onDone={onDone} />)
+    expect((screen.getByLabelText('Categoria') as HTMLSelectElement).value).toBe('c9')
+    await userEvent.type(screen.getByLabelText('Assinatura'), 'Streaming')
+    await userEvent.type(screen.getByLabelText('Valor mensal (R$)'), '39,90')
+    await userEvent.clear(screen.getByLabelText('Dia da cobrança'))
+    await userEvent.type(screen.getByLabelText('Dia da cobrança'), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Adicionar assinatura' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]!.body))
+    expect(body).toMatchObject({ card_id: 'k1', description: 'Streaming', amount: '39.90', category_id: 'c9', charge_day: 5 })
+    expect(body).not.toHaveProperty('user_id')
+  })
+})

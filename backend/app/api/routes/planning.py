@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, client_ip, get_auth
+from app.api.deps import AuthContext, client_ip, get_auth, get_auth_synced
 from app.db import get_db
 from app.models import Goal
 from app.schemas import MessageOut
@@ -31,7 +31,7 @@ router = APIRouter(tags=["orçamentos, metas e exportação"])
 # ---------------------------------------------------------------- orçamentos
 
 @router.get("/budgets", response_model=list[BudgetOut])
-def list_budgets(month: date | None = None, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def list_budgets(month: date | None = None, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     return planning.budgets_for_month(db, ctx.user.id, month or today())
 
 
@@ -70,7 +70,7 @@ def copy_budgets(body: BudgetCopy, ctx: AuthContext = Depends(get_auth), db: Ses
 # ---------------------------------------------------------------- metas
 
 @router.get("/goals", response_model=list[GoalOut])
-def list_goals(ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def list_goals(ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     rows = db.scalars(select(Goal).where(Goal.user_id == ctx.user.id).order_by(Goal.created_at)).unique().all()
     return [planning.goal_view(g) for g in rows]
 
@@ -136,7 +136,7 @@ def _download(content: bytes, filename: str, media: str) -> Response:
 
 
 @router.get("/export/all.zip", summary="Todos os meus dados (ZIP com CSVs e perfil)")
-def export_all(request: Request, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+def export_all(request: Request, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     enforce(f"export:user:{ctx.user.id}", limit=10, window_seconds=3600)
     content = export.export_all(db, ctx.user)
     audit.record(db, "data_exported", "success", actor_id=ctx.user.id, details={"dataset": "all"}, ip=client_ip(request))
@@ -146,7 +146,7 @@ def export_all(request: Request, ctx: AuthContext = Depends(get_auth), db: Sessi
 
 @router.get("/export/{dataset}.csv", summary="Um conjunto de dados em CSV")
 def export_csv(dataset: str, start: date | None = None, end: date | None = None,
-               ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)):
+               ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
     if dataset not in export.DATASETS:
         raise HTTPException(404, {"code": "not_found", "message": "Conjunto de dados inexistente."})
     enforce(f"export:user:{ctx.user.id}", limit=60, window_seconds=3600)

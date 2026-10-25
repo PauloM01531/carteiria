@@ -271,8 +271,11 @@ export function PurchaseForm({
       </div>
       {preview && <p className="tabular rounded-xl bg-surface-2 px-4 py-3 text-sm font-semibold">{preview}</p>}
       <TextareaField label="Observações (opcional)" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      {initial?.subscription_id && (
+        <Alert kind="info">Esta cobrança vem de uma assinatura. Você pode ajustar o valor deste mês; para parar as cobranças, pause ou cancele a assinatura na tela Cartões.</Alert>
+      )}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-        {initial ? (
+        {initial && !initial.subscription_id ? (
           <Button type="button" variant="ghost" className="text-negative" onClick={() => setConfirm(true)}>
             Excluir compra
           </Button>

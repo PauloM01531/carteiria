@@ -247,8 +247,11 @@ def update_purchase(db: Session, user_id: uuid.UUID, purchase_id: uuid.UUID, cha
     return purchase
 
 
-def delete_purchase(db: Session, user_id: uuid.UUID, purchase_id: uuid.UUID) -> None:
+def delete_purchase(db: Session, user_id: uuid.UUID, purchase_id: uuid.UUID, from_subscription: bool = False) -> None:
     purchase = get_purchase(db, user_id, purchase_id)
+    if purchase.subscription_id and not from_subscription:
+        raise _err(409, "subscription_charge",
+                   "Esta cobrança vem de uma assinatura. Para parar as cobranças, pause ou cancele a assinatura.")
     old_statements = {i.statement_id for i in purchase.installments}
     _ensure_unlocked(db, user_id, list(old_statements))
     db.delete(purchase)

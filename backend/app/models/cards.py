@@ -61,12 +61,43 @@ class CardStatement(Base):
     card: Mapped[Card] = relationship(lazy="joined")
 
 
+class CardSubscription(Base):
+    """Cobrança recorrente no cartão (streaming, academia...). Gera uma compra à vista
+    por mês, na data de cobrança, que entra sozinha na fatura correspondente."""
+
+    __tablename__ = "card_subscriptions"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint("charge_day BETWEEN 1 AND 31", name="charge_day_valid"),
+        CheckConstraint("end_date IS NULL OR end_date >= start_date", name="end_after_start"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = _owner()
+    card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cards.id"), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    category_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False)
+    charge_day: Mapped[int] = mapped_column(nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = created_at_col()
+
+    card: Mapped[Card] = relationship(lazy="joined")
+    category: Mapped[Category] = relationship(lazy="joined")
+
+
 class CardPurchase(Base):
     __tablename__ = "card_purchases"
     __table_args__ = (
         CheckConstraint("total_amount > 0", name="amount_positive"),
         CheckConstraint("installments_count BETWEEN 1 AND 72", name="installments_valid"),
         CheckConstraint("extract(day from first_statement_month) = 1", name="first_month_first_day"),
+        # Uma cobrança por assinatura e data: evita duplicar o mês.
+        Index("uq_card_purchases_subscription_date", "subscription_id", "purchase_date", unique=True,
+              postgresql_where=text("subscription_id IS NOT NULL")),
     )
 
     id: Mapped[uuid.UUID] = _pk()
@@ -79,6 +110,9 @@ class CardPurchase(Base):
     installments_count: Mapped[int] = mapped_column(nullable=False)
     first_statement_month: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[str | None] = mapped_column(String(500))
+    subscription_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("card_subscriptions.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = created_at_col()
 
     category: Mapped[Category] = relationship(lazy="joined")
