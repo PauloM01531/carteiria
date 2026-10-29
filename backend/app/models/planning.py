@@ -61,3 +61,26 @@ class GoalContribution(Base):
     created_at: Mapped[datetime] = created_at_col()
 
     goal: Mapped[Goal] = relationship(back_populates="contributions")
+
+
+class PlannedPurchase(Base):
+    """Compra futura em avaliação (simulação). NÃO é despesa nem compra de cartão:
+    não entra em relatórios, faturas ou painel até ser registrada de fato."""
+
+    __tablename__ = "planned_purchases"
+    __table_args__ = (
+        CheckConstraint("total_amount > 0", name="amount_positive"),
+        CheckConstraint("installments_count BETWEEN 1 AND 72", name="installments_valid"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    installments_count: Mapped[int] = mapped_column(nullable=False)
+    first_installment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    category_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = created_at_col()
+
+    category: Mapped[Category] = relationship(lazy="joined")

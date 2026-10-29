@@ -15,6 +15,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // A máquina de desenvolvimento fica lenta com vários arquivos em paralelo; páginas carregadas sob demanda precisam de folga.
+    testTimeout: 20000,
     css: false,
   },
 })

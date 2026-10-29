@@ -18,6 +18,7 @@ const BillsPage = lazy(() => import('./pages/bills/BillsPage'))
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
 const PlanningPage = lazy(() => import('./pages/PlanningPage'))
+const PlannedPurchasesPage = lazy(() => import('./pages/planned/PlannedPurchasesPage'))
 
 export function AppRoutes() {
   return (
@@ -43,6 +44,7 @@ export function AppRoutes() {
           <Route path="/categorias" element={<CategoriesPage />} />
           <Route path="/relatorios" element={<ReportsPage />} />
           <Route path="/orcamentos" element={<PlanningPage />} />
+          <Route path="/compras-planejadas" element={<PlannedPurchasesPage />} />
           <Route path="/perfil" element={<Profile />} />
           <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         </Route>

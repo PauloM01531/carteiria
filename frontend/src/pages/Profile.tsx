@@ -276,6 +276,7 @@ function QuickLinks() {
     <div className="flex flex-wrap gap-2 lg:hidden">
       <Link to="/relatorios" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Relatórios</Link>
       <Link to="/orcamentos" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Orçamentos e metas</Link>
+      <Link to="/compras-planejadas" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Compras planejadas</Link>
       <Link to="/categorias" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Categorias</Link>
       {user?.role === 'ADMIN' && <Link to="/admin" className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold">Administração</Link>}
     </div>

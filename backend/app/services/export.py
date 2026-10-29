@@ -25,6 +25,7 @@ from app.models import (
     Category,
     Goal,
     GoalContribution,
+    PlannedPurchase,
     Installment,
     RecurringBill,
     StatementPayment,
@@ -139,6 +140,12 @@ def _categories(db: Session, uid: uuid.UUID, *_: object) -> bytes:
     return to_csv(["Nome", "Tipo", "Ativa"], [[c.name, KIND[c.kind], c.active] for c in rows])
 
 
+def _planned(db: Session, uid: uuid.UUID, *_: object) -> bytes:
+    rows = db.scalars(select(PlannedPurchase).where(PlannedPurchase.user_id == uid).order_by(PlannedPurchase.first_installment_date)).unique().all()
+    return to_csv(["Compra planejada", "Valor total", "Parcelas", "Primeira parcela", "Categoria", "Observações"],
+                  [[p.name, p.total_amount, p.installments_count, p.first_installment_date, p.category.name, p.notes] for p in rows])
+
+
 DATASETS: dict[str, tuple[str, Callable]] = {
     "lancamentos": ("lancamentos.csv", _transactions),
     "compras-cartao": ("compras_cartao.csv", _purchases),
@@ -149,6 +156,7 @@ DATASETS: dict[str, tuple[str, Callable]] = {
     "orcamentos": ("orcamentos.csv", _budgets),
     "metas": ("metas.csv", _goals),
     "categorias": ("categorias.csv", _categories),
+    "compras-planejadas": ("compras_planejadas.csv", _planned),
 }
 
 

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.routes import admin, auth, bills, cards, categories, health, me, planning, reports, transactions
+from app.api.routes import admin, auth, bills, cards, categories, health, me, planned, planning, reports, transactions
 from app.config import get_settings
 from app.security.rate_limit import limiter
 
@@ -99,7 +99,7 @@ def create_app() -> FastAPI:
         )
 
     for r in (health.router, auth.router, me.router, categories.router, transactions.router,
-              cards.router, bills.router, reports.router, reports.dash, planning.router, admin.router):
+              cards.router, bills.router, reports.router, reports.dash, planning.router, planned.router, admin.router):
         app.include_router(r, prefix="/api/v1")
     return app
 

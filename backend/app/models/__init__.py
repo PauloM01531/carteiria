@@ -14,7 +14,7 @@ from app.models.cards import (
     RecurringBill,
     StatementPayment,
 )
-from app.models.planning import Budget, Goal, GoalContribution
+from app.models.planning import Budget, Goal, GoalContribution, PlannedPurchase
 
 __all__ = [
     "Base",
@@ -38,4 +38,5 @@ __all__ = [
     "Budget",
     "Goal",
     "GoalContribution",
+    "PlannedPurchase",
 ]
