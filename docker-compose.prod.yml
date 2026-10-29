@@ -25,14 +25,16 @@ services:
       retries: 20
     networks: [internal]
 
-  # Aplica as migrações com o papel DONO e termina.
+  # Aplica as migrações com o papel DONO e termina. Também é usado para comandos do servidor:
+  #   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrate python -m app.cli promote-admin email
   migrate:
     build: ./backend
     command: ["alembic", "upgrade", "head"]
     env_file: .env.production
-    environment: &api_env
+    environment:
       DB_HOST: db
       DB_PORT: "5432"
+      POSTGRES_SUPERUSER_PASSWORD: ""   # nenhum contêiner da aplicação recebe a senha de superusuário
     depends_on:
       db:
         condition: service_healthy
@@ -43,7 +45,12 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env.production
-    environment: *api_env
+    # Menor privilégio: a API só recebe a senha do papel da aplicação (sujeito ao RLS).
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_OWNER_PASSWORD: ""
+      POSTGRES_SUPERUSER_PASSWORD: ""
     depends_on:
       migrate:
         condition: service_completed_successfully

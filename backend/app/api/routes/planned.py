@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, PlainSerializer, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_auth, get_auth_synced
@@ -15,7 +15,10 @@ from app.db import get_db
 from app.models import PlannedPurchase
 from app.schemas import In, MessageOut
 from app.schemas_finance import Money, MoneyIn, _check_date, _clean_text
+from app.security.rate_limit import enforce
 from app.services import planned as svc
+
+MAX_PLANNED = 30  # cada análise percorre até 72 meses: limita o custo por usuário
 
 router = APIRouter(prefix="/planned-purchases", tags=["compras planejadas"])
 
@@ -126,6 +129,7 @@ def list_planned(ctx: AuthContext = Depends(get_auth_synced), db: Session = Depe
 
 @router.post("/simulate", response_model=AnalysisOut, summary="Analisa uma compra sem salvar")
 def simulate(body: PlannedIn, ctx: AuthContext = Depends(get_auth_synced), db: Session = Depends(get_db)):
+    enforce(f"planned-simulate:user:{ctx.user.id}", limit=60, window_seconds=3600)
     svc.check_inputs(db, ctx.user.id, body.total_amount, body.installments_count, body.category_id)
     return svc.analyze(db, ctx.user.id, body.name, body.total_amount, body.installments_count,
                        body.first_installment_date, body.category_id)
@@ -133,6 +137,9 @@ def simulate(body: PlannedIn, ctx: AuthContext = Depends(get_auth_synced), db: S
 
 @router.post("", response_model=PlannedOut, status_code=201)
 def create_planned(body: PlannedIn, ctx: AuthContext = Depends(get_auth), db: Session = Depends(get_db)) -> PlannedOut:
+    count = db.scalar(select(func.count(PlannedPurchase.id)).where(PlannedPurchase.user_id == ctx.user.id))
+    if count >= MAX_PLANNED:
+        raise HTTPException(422, {"code": "too_many", "message": f"Limite de {MAX_PLANNED} compras planejadas atingido. Exclua alguma para cadastrar outra."})
     svc.check_inputs(db, ctx.user.id, body.total_amount, body.installments_count, body.category_id)
     p = PlannedPurchase(user_id=ctx.user.id, **body.model_dump())
     db.add(p)

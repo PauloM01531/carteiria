@@ -24,15 +24,16 @@ RLS_KEY = "rls_user_id"
 
 def get_app_engine() -> Engine:
     if "app" not in _engines:
+        # hide_parameters: erros do banco não levam valores (hash de senha, descrições) para os logs.
         _engines["app"] = create_engine(
-            get_settings().app_database_url, pool_pre_ping=True, pool_size=10
+            get_settings().app_database_url, pool_pre_ping=True, pool_size=10, hide_parameters=True
         )
     return _engines["app"]
 
 
 def get_owner_engine() -> Engine:
     if "owner" not in _engines:
-        _engines["owner"] = create_engine(get_settings().owner_database_url, pool_pre_ping=True)
+        _engines["owner"] = create_engine(get_settings().owner_database_url, pool_pre_ping=True, hide_parameters=True)
     return _engines["owner"]
 
 

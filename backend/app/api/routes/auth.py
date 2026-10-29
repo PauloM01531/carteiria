@@ -24,7 +24,7 @@ from app.schemas import (
     UserOut,
 )
 from app.security import mfa, passwords
-from app.security.rate_limit import enforce
+from app.security.rate_limit import enforce, limiter
 from app.security.tokens import csrf_for_session, hash_token
 from app.services import audit, auth_tokens, sessions
 from app.services.email import get_email_sender
@@ -109,12 +109,14 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)) 
 
     existing = db.scalar(select(User).where(User.email == email))
     if existing is not None:
-        # Não revela que a conta existe; avisa o dono do e-mail.
-        get_email_sender().send(
-            existing.email,
-            "Tentativa de cadastro na CarteirIA",
-            "Alguém tentou criar uma conta com o seu e-mail. Se foi você, use 'Esqueci minha senha'.",
-        )
+        # Não revela que a conta existe; avisa o dono do e-mail (no máximo 1 aviso a cada 6 h,
+        # para o formulário não virar ferramenta de envio de spam para a caixa de alguém).
+        if limiter.hit(f"dup-notice:{email}", 1, 6 * HOUR):
+            get_email_sender().send(
+                existing.email,
+                "Tentativa de cadastro na CarteirIA",
+                "Alguém tentou criar uma conta com o seu e-mail. Se foi você, use 'Esqueci minha senha'.",
+            )
         return MessageOut(message=GENERIC_REGISTER)
 
     user = User(

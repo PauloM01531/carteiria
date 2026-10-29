@@ -12,7 +12,7 @@ import uuid
 from datetime import date, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,8 @@ from app.services.transactions import validate_category
 
 HORIZON_DAYS = 31
 NOTE = "Assinatura recorrente"
+MAX_BACKFILL_MONTHS = 24   # evita gerar centenas de cobranças antigas de uma vez
+MAX_ACTIVE = 50
 
 
 def _err(status: int, code: str, message: str) -> HTTPException:
@@ -107,7 +109,17 @@ def remove_future(db: Session, user_id: uuid.UUID, sub: CardSubscription, after:
             pass  # fatura já tem pagamento: mantém a cobrança
 
 
+def _check_start(start: date) -> None:
+    if start < add_months(first_of_month(today()), -MAX_BACKFILL_MONTHS):
+        raise _err(422, "start_too_old", f"A data de início pode ser de no máximo {MAX_BACKFILL_MONTHS} meses atrás.")
+
+
 def create(db: Session, user_id: uuid.UUID, data: dict) -> CardSubscription:
+    _check_start(data["start_date"])
+    active = db.scalar(select(func.count(CardSubscription.id)).where(
+        CardSubscription.user_id == user_id, CardSubscription.active.is_(True)))
+    if active >= MAX_ACTIVE:
+        raise _err(422, "too_many", f"Limite de {MAX_ACTIVE} assinaturas ativas atingido.")
     card = cards.get_card(db, user_id, data["card_id"])
     if not card.active:
         raise _err(422, "inactive_card", "Este cartão está inativo.")
@@ -122,6 +134,8 @@ def create(db: Session, user_id: uuid.UUID, data: dict) -> CardSubscription:
 
 def update(db: Session, user_id: uuid.UUID, sub_id: uuid.UUID, changes: dict) -> CardSubscription:
     sub = get_subscription(db, user_id, sub_id)
+    if "start_date" in changes and changes["start_date"] != sub.start_date:
+        _check_start(changes["start_date"])
     if "card_id" in changes and changes["card_id"] != sub.card_id:
         card = cards.get_card(db, user_id, changes["card_id"])
         if not card.active:

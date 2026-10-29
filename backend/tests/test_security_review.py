@@ -180,3 +180,59 @@ def test_limite_global_de_requisicoes(monkeypatch):
     c = TestClient(test_app)
     codes = [c.get(f"{API}/health").status_code for _ in range(7)]
     assert codes[:5] == [200] * 5 and codes[-1] == 429
+
+
+# ------------------------------------------------------------ revisão antes da publicação
+
+def test_producao_recusa_configuracao_insegura():
+    from app.config import Settings, check_production
+
+    base = dict(secret_key="x" * 48, db_app_user="carteiria_app", db_app_password="Z" * 40, environment="production",
+                cookie_secure=True, frontend_url="https://carteiria.com.br", frontend_origins="https://carteiria.com.br",
+                smtp_host="smtp-relay.brevo.com")
+    assert check_production(Settings(_env_file=None, **base)) == []
+    bad = {"cookie_secure": False, "secret_key": "curta", "frontend_url": "http://carteiria.com.br",
+           "frontend_origins": "http://carteiria.com.br", "smtp_host": "localhost", "db_app_password": "troque-esta-senha-app"}
+    for k, v in bad.items():
+        assert check_production(Settings(_env_file=None, **{**base, k: v})), k
+
+
+def test_api_sem_credencial_do_dono_nao_monta_conexao_privilegiada():
+    from app.config import Settings
+
+    s = Settings(_env_file=None, secret_key="x" * 48, db_app_user="a", db_app_password="b", db_owner_password="")
+    with pytest.raises(RuntimeError, match="migrate"):
+        _ = s.owner_database_url
+
+
+def test_erros_do_banco_nao_expoem_valores_nos_logs():
+    from app.db import get_app_engine
+
+    assert get_app_engine().hide_parameters is True
+
+
+def test_aviso_de_cadastro_duplicado_nao_vira_spam(mailbox, user_a):
+    before = len(mailbox.outbox)
+    for i in range(3):
+        r = TestClient(app).post(f"{API}/auth/register", json={"display_name": "Outra pessoa", "email": "ana@exemplo.com.br", "password": PASSWORD},
+                                 headers={"X-Forwarded-For": f"10.0.0.{i}"})
+        assert r.status_code == 202
+    assert len(mailbox.outbox) - before == 1
+
+
+def test_assinatura_nao_aceita_inicio_muito_antigo(user_a):
+    card = user_a.post(f"{API}/cards", json={"nickname": "C", "closing_day": 10, "due_day": 17}).json()
+    cat = next(c["id"] for c in user_a.get(f"{API}/categories").json() if c["name"] == "Assinaturas")
+    r = user_a.post(f"{API}/card-subscriptions", json={"card_id": card["id"], "description": "x", "amount": "10.00",
+                                                       "category_id": cat, "charge_day": 5, "start_date": "2000-01-01"})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "start_too_old"
+    assert super_exec("SELECT count(*) FROM card_purchases").scalar() == 0
+
+
+def test_limite_de_compras_planejadas(user_a, monkeypatch):
+    import app.api.routes.planned as planned_routes
+
+    monkeypatch.setattr(planned_routes, "MAX_PLANNED", 2)
+    cat = next(c["id"] for c in user_a.get(f"{API}/categories").json() if c["name"] == "Compras")
+    body = {"name": "x", "total_amount": "10.00", "installments_count": 1, "first_installment_date": "2027-01-10", "category_id": cat}
+    assert [user_a.post(f"{API}/planned-purchases", json=body).status_code for _ in range(3)] == [201, 201, 422]

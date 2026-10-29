@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     db_port: int = 5433
     db_name: str = "carteiria"
     db_test_name: str = "carteiria_test"
-    db_owner_user: str
-    db_owner_password: str
+    # Credenciais do papel DONO: só migrações e comandos administrativos do servidor precisam delas.
+    # Em produção a API roda sem elas (menor privilégio).
+    db_owner_user: str = "carteiria_owner"
+    db_owner_password: str | None = None
     db_app_user: str
     db_app_password: str
 
@@ -68,15 +70,38 @@ class Settings(BaseSettings):
 
     @property
     def owner_database_url(self) -> str:
+        if not self.db_owner_password:
+            raise RuntimeError(
+                "Credenciais do papel dono ausentes. Rode migrações e comandos administrativos pelo "
+                "serviço 'migrate' (docker compose -f docker-compose.prod.yml run --rm migrate ...)."
+            )
         return self._url(self.db_owner_user, self.db_owner_password)
+
+
+def check_production(s: Settings) -> list[str]:
+    """Problemas de configuração que impedem rodar em produção com segurança."""
+    problems = []
+    if not s.cookie_secure:
+        problems.append("COOKIE_SECURE deve ser true (HTTPS).")
+    if len(s.secret_key) < 32 or "gere-um-valor" in s.secret_key:
+        problems.append("SECRET_KEY ausente, curta ou com o valor de exemplo.")
+    if not s.frontend_url.startswith("https://"):
+        problems.append("FRONTEND_URL deve ser o endereço público com https://.")
+    if not s.allowed_origins or any(not o.startswith("https://") for o in s.allowed_origins):
+        problems.append("FRONTEND_ORIGINS deve conter só endereços https://.")
+    if s.smtp_host in ("", "localhost", "127.0.0.1"):
+        problems.append("SMTP_HOST deve apontar para um provedor de e-mail real.")
+    weak = ("troque-esta-senha", "senha", "password", "123456")
+    if len(s.db_app_password) < 20 or any(w in s.db_app_password.lower() for w in weak):
+        problems.append("DB_APP_PASSWORD fraca ou com o valor de exemplo.")
+    return problems
 
 
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()  # type: ignore[call-arg]
     if s.is_production:
-        if not s.cookie_secure:
-            raise RuntimeError("Em produção COOKIE_SECURE deve ser true (HTTPS).")
-        if len(s.secret_key) < 32:
-            raise RuntimeError("SECRET_KEY muito curta para produção.")
+        problems = check_production(s)
+        if problems:
+            raise RuntimeError("Configuração de produção insegura: " + " ".join(problems))
     return s

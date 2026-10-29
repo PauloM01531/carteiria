@@ -41,6 +41,13 @@
 
 	log {
 		output stdout
-		format console
+		# Não registra termos de busca nem o token CSRF (o Caddy já oculta Cookie e Authorization).
+		format filter {
+			wrap console
+			request>uri query {
+				delete q
+			}
+			request>headers>X-Csrf-Token delete
+		}
 	}
 }
