@@ -1,36 +1,55 @@
-# Segredos e configurações locais
+# ===== Segredos e configurações locais =====
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.pem
 *.key
+*.p12
+*.pfx
 
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Node / frontend
-node_modules/
-dist/
-coverage/
-*.local
-
-# Bancos locais, dumps e backups (podem conter dados financeiros)
+# ===== Bancos, dumps, backups e logs (podem ter dados financeiros) =====
+backups/
+pgdata/
+caddy_data/
+caddy_config/
 *.db
 *.sqlite
 *.sqlite3
 *.dump
+*.dump.enc
+*.enc
+*.sql
 *.sql.gz
-backups/
-pgdata/
+*.log
+logs/
 
-# IDE / SO
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== Node / frontend =====
+node_modules/
+dist/
+coverage/
+*.local
+npm-debug.log*
+
+# ===== Prints com dados reais (use só prints da conta fictícia em docs/prints/) =====
+prints-reais/
+
+# ===== IDE / sistema =====
 .vscode/
 .idea/
 Thumbs.db
 .DS_Store
-!.env.production.example
+
+# ===== Documentação interna (fica só no seu PC; no GitHub vão apenas os prints) =====
+docs/*
+!docs/prints/
